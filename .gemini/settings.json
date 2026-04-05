@@ -1,4 +1,7 @@
 {
+  "model": {
+    "name": "gemini-3.1-pro-preview"
+  },
   "hooks": {
     "AfterTool": [
       {
@@ -20,6 +23,11 @@
           },
           {
             "command": "node .gemini/hooks/validate-project-files.js",
+            "timeout": 30000,
+            "type": "command"
+          },
+          {
+            "command": "node .gemini/hooks/validate-home.js",
             "timeout": 30000,
             "type": "command"
           }

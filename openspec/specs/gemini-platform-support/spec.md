@@ -65,13 +65,19 @@ The system SHALL provide a GEMINI.md at the project root containing the same int
 
 ### Requirement: Gemini subagent definitions
 
-The system SHALL provide `.gemini/agents/post-op.md` and `.gemini/agents/link-inference.md` as formal subagent definitions with YAML frontmatter specifying model, tools, max_turns, and timeout_mins.
+The system SHALL provide `.gemini/agents/post-op.md` and `.gemini/agents/link-inference.md` as formal subagent definitions with YAML frontmatter specifying tools, max_turns, and timeout_mins. The `model` field SHALL be omitted to inherit the session model.
 
 #### Scenario: Post-op agent definition
 
 - **WHEN** reading `.gemini/agents/post-op.md`
-- **THEN** it contains YAML frontmatter with name, description, model (gemini-2.5-flash), tools list (read_file, write_file, replace, glob), max_turns, and timeout_mins
+- **THEN** it contains YAML frontmatter with name, description, tools list (read_file, write_file, replace, glob), max_turns, and timeout_mins
+- **AND** the frontmatter does NOT contain a `model` field
 - **AND** the body contains the post-op pipeline instructions adapted from `tm-post-op` SKILL.md
+
+#### Scenario: Post-op agent inherits session model
+
+- **WHEN** the post-op subagent is invoked during a session using `gemini-3.1-pro-preview`
+- **THEN** the subagent runs with `gemini-3.1-pro-preview` (inherited from session)
 
 #### Scenario: Link-inference agent definition
 

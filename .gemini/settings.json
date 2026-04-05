@@ -1,42 +1,41 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "AfterTool": [
       {
         "hooks": [
           {
-            "command": "node .claude/hooks/validate-card.js",
+            "command": "node .gemini/hooks/validate-card.js",
             "timeout": 30,
             "type": "command"
           },
           {
-            "command": "node .claude/hooks/validate-inbox.js",
+            "command": "node .gemini/hooks/validate-inbox.js",
             "timeout": 30,
             "type": "command"
           },
           {
-            "command": "node .claude/hooks/validate-action.js",
+            "command": "node .gemini/hooks/validate-action.js",
             "timeout": 30,
             "type": "command"
           },
           {
-            "command": "node .claude/hooks/validate-project-files.js",
+            "command": "node .gemini/hooks/validate-project-files.js",
             "timeout": 30,
             "type": "command"
           }
         ],
-        "matcher": "Write|Edit"
+        "matcher": "write_file|replace"
       },
       {
         "hooks": [
           {
-            "command": "node .claude/hooks/validate-index.js",
+            "command": "node .gemini/hooks/validate-index.js",
             "timeout": 30,
             "type": "command"
           }
         ],
-        "matcher": "Write|Edit"
+        "matcher": "write_file|replace"
       }
     ]
-  },
-  "includeGitInstructions": false
+  }
 }

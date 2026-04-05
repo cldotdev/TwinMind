@@ -11,6 +11,38 @@ metadata:
 
 Actions 存在 `vault/PARA/Actions/` 中，每個行動一個 .md 檔案。行動可以包含自己的 task checklist，也可以在 scope 擴大時升格為 Project。
 
+一致性驗證由 AfterTool hooks 自動處理。狀態變更操作完成後啟動 foreground subagent 執行 post-op pipeline（`layer: "action"`）。唯讀查詢不需要。
+
+### Post-op Subagent 啟動方式
+
+透過 subagent（synchronous foreground execution）啟動，prompt 包含 post-op payload：
+
+```json
+{
+  "task": "post-op",
+  "layer": "action",
+  "event_type": "<ACTION_CREATED|ACTION_COMPLETED|ACTION_PROMOTED_TO_PROJECT>",
+  "event_context": { "action_id": "<id>", "action_title": "<title>" },
+  "config": {
+    "moc_threshold_create": "<從 config.md 取值>",
+    "moc_threshold_split": "<從 config.md 取值>",
+    "recent_cards_count": "<從 config.md 取值>",
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": "<從 vault-index.json stats.domains 取值>"
+  },
+  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ]
+}
+```
+
+`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
+
+等待 subagent 完成後再回應使用者。Subagent 依照 `.gemini/skills/tm-post-op/SKILL.md` 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ Dashboard 重建（使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json）。
+
 ## 建立獨立 Action
 
 生成 slug（標題轉 kebab-case 英文），檢查檔案衝突。建立 `vault/PARA/Actions/<slug>.md`。

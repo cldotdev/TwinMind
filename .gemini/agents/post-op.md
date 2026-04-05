@@ -18,9 +18,9 @@ timeout_mins: 3
 
 依照 `.gemini/skills/tm-post-op/SKILL.md` 的完整程序執行。核心流程：
 
-1. **寫入 changelog**：解析 event_type + event_context，append 至 `vault/System/changelog.md`
-2. **MOC 觸發檢查**（僅 layer=knowledge 或 both）：讀取 `vault/System/config.md` 取得 threshold，檢查 event 影響的 domain 是否達到 MOC 建立/更新門檻
-3. **Home.md 重新生成**（僅 layer=knowledge 或 both）：讀取 `vault/System/vault-index.json`，重建 `vault/Home.md`
+1. **寫入 changelog**：解析 event_type + event_context，append-only 寫入至月度檔案 `vault/System/changelog-YYYY-MM.md`。若月度檔案不存在則先建立（`# Changelog YYYY-MM` + 空行），再 append 條目。建立新月度檔案時，在 `vault/System/changelog.md`（索引頁）的 `# Changelog` heading 後首行插入 `- [[changelog-YYYY-MM|YYYY-MM]]`（newest-first）。不讀取既有 changelog 內容
+2. **MOC 觸發檢查**（僅 layer=knowledge 或 both）：從 payload 的 `config.moc_threshold_create` 和 `config.moc_threshold_split` 取得門檻值，從 `domain_counts` 取得各 domain 卡片數。**不讀取 `config.md` 或 `vault-index.json`。** 檢查 event 影響的 domain 是否達到 MOC 建立/更新門檻
+3. **Home.md 重新生成**（僅 layer=knowledge 或 both）：區塊 4（最近新增）從 payload 的 `recent_notes` 生成，**不讀取 vault-index.json**。其餘區塊（1/2/3/5）從 `vault/System/vault-index.json` 讀取。重建 `vault/Home.md`
 4. **Dashboard.md 重新生成**（僅 layer=action 或 both）：讀取索引，重建 `vault/PARA/Dashboard.md`
 
 ## 限制
@@ -41,13 +41,26 @@ timeout_mins: 3
     "card_title": "<Title>",
     "card_path": "<Path>",
     "domains": ["<domain>"]
-  }
+  },
+  "config": {
+    "moc_threshold_create": 5,
+    "moc_threshold_split": 20,
+    "recent_cards_count": 5,
+    "vault_name": "TwinMind"
+  },
+  "domain_counts": { "technology": 5, "learning": 3 },
+  "total_cards": 22,
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "2026-04-05", "status": "seed", "type": "concept", "domain": ["technology"] }
+  ]
 }
 ```
 
+`config`、`domain_counts`、`total_cards`、`recent_notes` 由 calling skill 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。Subagent 使用這些欄位取代讀取 `config.md` 和 `vault-index.json`（MOC 檢查和 Home.md block 4）。
+
 ## Home.md 格式（5 區塊，完整重寫 `vault/Home.md`）
 
-從 `vault/System/vault-index.json` 讀取資料，按以下 5 個區塊**嚴格依序**生成。
+區塊 4（最近新增）從 payload 的 `recent_notes` 生成，**不讀取 vault-index.json**。其餘區塊（1/2/3/5）從 `vault/System/vault-index.json` 讀取資料。按以下 5 個區塊**嚴格依序**生成。
 
 **區塊 1 — 進行中專案**
 從 `projects` 篩選 `status == "active"`，讀取對應 `goal.md` 的 `deadline`。
@@ -63,7 +76,7 @@ timeout_mins: 3
 空態：「尚未建立知識地圖（需累積至少 5 張同領域卡片）」
 
 **區塊 4 — 最近新增**
-從 `notes` 按 `id` 降序取前 N 筆（N = `config.md` 的 `recent_cards_count`，預設 5）。
+從 payload 的 `recent_notes` 陣列取得（已由 main agent 按 id 降序排好前 N 筆，N = `config.recent_cards_count`）。**不讀取 vault-index.json 或 config.md。**
 格式：`- <emoji> [[Cards/<slug>|<title>]] — <YYYY-MM-DD>`
 emoji：🌱 seed、🌿 growing、🌳 evergreen。Source 類型用 `Sources/<slug>`。
 空態：「尚無卡片」

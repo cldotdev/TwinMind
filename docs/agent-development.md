@@ -19,8 +19,7 @@ TwinMind/
 │   ├── skills/               # Gemini CLI skill definitions
 │   │   └── tm-*/SKILL.md
 │   └── agents/               # Gemini subagent definitions
-│       ├── post-op.md
-│       └── link-inference.md
+│       └── post-op.md
 └── vault/                    # Shared vault (platform-agnostic)
 ```
 
@@ -46,7 +45,7 @@ This is the most significant behavioral difference between platforms:
 | Aspect | Claude Code | Gemini CLI |
 |--------|-------------|------------|
 | Post-op execution | Background (`run_in_background: true`) | Foreground (synchronous) |
-| Link inference | Foreground (`run_in_background: false`) | Foreground (synchronous) |
+| Link inference | Inline (main agent) | Inline (main agent) |
 | User response timing | Immediate (before post-op completes) | After post-op completes |
 | Subagent definition | Inline prompt via Agent tool | `.gemini/agents/*.md` files |
 
@@ -69,6 +68,8 @@ Replace with:
 等待 subagent 完成後再回應使用者
 foreground subagent
 ```
+
+Link inference is now inline on both platforms (main agent executes directly using vault-index.json data from context). No subagent text patterns to sync for link inference.
 
 ## Hook Configuration
 

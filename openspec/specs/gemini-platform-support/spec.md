@@ -65,7 +65,7 @@ The system SHALL provide a GEMINI.md at the project root containing the same int
 
 ### Requirement: Gemini subagent definitions
 
-The system SHALL provide `.gemini/agents/post-op.md` and `.gemini/agents/link-inference.md` as formal subagent definitions with YAML frontmatter specifying tools, max_turns, and timeout_mins. The `model` field SHALL be omitted to inherit the session model.
+The system SHALL provide `.gemini/agents/post-op.md` as a formal subagent definition with YAML frontmatter specifying tools, max_turns, and timeout_mins. The `model` field SHALL be omitted to inherit the session model. Link inference is executed inline by the main agent (no subagent).
 
 #### Scenario: Post-op agent definition
 
@@ -79,16 +79,10 @@ The system SHALL provide `.gemini/agents/post-op.md` and `.gemini/agents/link-in
 - **WHEN** the post-op subagent is invoked during a session using `gemini-3.1-pro-preview`
 - **THEN** the subagent runs with `gemini-3.1-pro-preview` (inherited from session)
 
-#### Scenario: Link-inference agent definition
-
-- **WHEN** reading `.gemini/agents/link-inference.md`
-- **THEN** it contains YAML frontmatter with name, description, tools list (read_file, glob), max_turns, and timeout_mins
-- **AND** the body contains link inference instructions adapted from `tm-capture` SKILL.md's link-inference section
-
 #### Scenario: Agents discoverable by Gemini CLI
 
 - **WHEN** a user runs `/agents list` in Gemini CLI
-- **THEN** both `post-op` and `link-inference` agents appear in the list
+- **THEN** `post-op` agent appears in the list
 
 ### Requirement: Foreground post-op execution in Gemini skills
 

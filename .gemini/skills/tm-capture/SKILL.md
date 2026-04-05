@@ -9,7 +9,7 @@ metadata:
 
 捕捉使用者的想法、知識、問題或來源引用，轉化為知識卡片。建卡後自動尋找並建立與既有卡片的連結——這是知識庫產生價值的核心機制，因為孤立的卡片遠不如互相連結的知識網路有用。
 
-一致性驗證由 AfterTool hooks 自動處理，不需手動檢查。完成操作後啟動同步 subagent 執行 post-op pipeline（changelog、MOC、Home 更新）。連結推理委派給 foreground subagent 執行。
+一致性驗證由 AfterTool hooks 自動處理，不需手動檢查。完成操作後啟動同步 subagent 執行 post-op pipeline（changelog、MOC、Home 更新）。連結推理由 main agent inline 執行（不使用 subagent）。
 
 ## 建立卡片（CARD_CREATED）
 
@@ -73,56 +73,25 @@ related_projects: []
 （尚無連結）
 ```
 
-### Step 5.5 — 連結推理（Foreground Subagent）
+### Step 5.5 — 連結推理（Inline 執行）
 
-建卡的核心增值步驟——自動發現新卡片與既有知識的關聯。此步驟委派給 **foreground subagent** 執行，避免掃描所有 notes 的 file I/O 佔用 main agent context。
+建卡的核心增值步驟——自動發現新卡片與既有知識的關聯。Main agent 直接使用 session 啟動時已載入 context 的 vault-index.json notes 資料執行語意比對，**不啟動 foreground subagent**。
 
-**啟動 foreground subagent：**
+**執行流程：**
 
-透過 subagent（同步執行）啟動 subagent，prompt 包含：
-
-```text
-你是 TwinMind link-inference subagent。掃描知識庫索引，為新建卡片找出語意相關的既有卡片。
-
-## 輸入
-{
-  "task": "link-inference",
-  "new_card": {
-    "id": "<新卡片 ID>",
-    "title": "<新卡片標題>",
-    "summary": "<一句話摘要>",
-    "domain": ["<domain1>", ...],
-    "type": "<concept|insight|source|question>"
-  },
-  "vault_index_path": "vault/System/vault-index.json"
-}
-
-## 執行步驟
-1. 讀取 vault-index.json
-2. 遍歷所有 notes，比對 title/summary/domain 語意相關性
-3. 最多回傳 5 筆建議，排序：title 相似度 > summary 重疊 > 共享 domain
+1. 從 context 中已有的 vault-index.json `notes` 資料，遍歷所有既有卡片
+2. 比對新卡片的 `title`、`summary`、`domain` 與每張既有卡片的對應欄位
+3. 識別語意相關的卡片（最多 5 筆），排序：title 相似度 > summary 重疊 > 共享 domain
 4. 對每筆建議判斷關係類型（is-part-of ⊂ / analogous ≈ / related ~ / inspires → / contradicts ⊕ / supports ⇒）
+5. 根據使用者原始輸入上下文，決定採納哪些建議
 
-## 限制
-- 僅讀取 vault-index.json，不寫入任何檔案
-- 不讀取卡片檔案內容
+**處理結果：**
 
-## 回傳格式
-有建議時：
-link-inference 完成 | 建議 N 張:
-<card_id> "<card_title>" — <relationship_type> (<原因>)
-
-無建議時：
-link-inference 完成 | 無建議連結
-```
-
-**處理 subagent 回傳：**
-
-- **有建議**：main agent 根據使用者原始輸入上下文，決定採納哪些建議。對每筆採納的建議，依 `references/link-inference.md` 的「建立連結程序」執行雙向連結寫入
+- **有建議且採納**：對每筆採納的建議，依 `references/link-inference.md` 的「建立連結程序」執行雙向連結寫入
 - **無建議**：Connections 保持 `（尚無連結）`
-- **Subagent 失敗**：跳過連結推理，通知使用者自動連結建議暫時不可用，Connections 保持 `（尚無連結）`
+- **索引資料異常**（如 notes 資料缺失或格式錯誤）：跳過連結推理，Connections 保持 `（尚無連結）`，告知使用者自動連結建議暫時不可用
 
-若 vault 為空（`notes` 為空物件），跳過 subagent 啟動，直接保持 `（尚無連結）`。
+若 vault 為空（`notes` 為空物件），跳過連結推理，直接保持 `（尚無連結）`。
 
 ### Step 6 — 更新索引
 
@@ -169,14 +138,30 @@ link-inference 完成 | 無建議連結
     "card_title": "<卡片標題>",
     "card_path": "<Cards/slug.md 或 Sources/slug.md>",
     "domains": ["<domain1>", ...]
-  }
+  },
+  "config": {
+    "moc_threshold_create": <從 config.md 取值>,
+    "moc_threshold_split": <從 config.md 取值>,
+    "recent_cards_count": <從 config.md 取值>,
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": <從 vault-index.json stats.domains 取值>
+  },
+  "total_cards": <從 vault-index.json stats.total_cards 取值>,
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ]
 }
+
+`config`、`domain_counts`、`total_cards` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
+`recent_notes` 為 vault-index.json notes 按 id 降序取前 N 筆（N = config.recent_cards_count），每筆含 title/path/created/status/type/domain。
 
 ## 執行步驟
 依照 .gemini/skills/tm-post-op/SKILL.md 的完整程序執行：
-1. 寫入 changelog（event_type + event_context）
-2. MOC 觸發檢查（受影響 domains）
-3. Home.md 重新生成
+1. 寫入 changelog（event_type + event_context）— append-only 至 changelog-YYYY-MM.md
+2. MOC 觸發檢查（從 payload 的 config 和 domain_counts 取值，不讀 config.md 和 vault-index.json）
+3. Home.md 重新生成（Recent Cards 從 payload 的 recent_notes 生成，其餘區塊讀 vault-index.json）
 
 不寫入 vault-index.json。MOC 變更包含在回傳訊息中。
 

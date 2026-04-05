@@ -9,6 +9,38 @@ metadata:
 
 獨立任務是系統中最小的「做」單位——「買牛奶」不值得建一個 Action 檔案，更不值得建一個 Project。所有獨立任務集中在 `vault/PARA/Tasks/tasks.md` 單一檔案中，用 checklist 格式管理，在 Obsidian 中一目了然。
 
+一致性驗證由 AfterTool hooks 自動處理。狀態變更操作完成後啟動 foreground subagent 執行 post-op pipeline（`layer: "action"`）。唯讀查詢不需要。
+
+### Post-op Subagent 啟動方式
+
+透過 subagent（synchronous foreground execution）啟動，prompt 包含 post-op payload：
+
+```json
+{
+  "task": "post-op",
+  "layer": "action",
+  "event_type": "<TASK_CREATED|TASK_COMPLETED|TASK_DELETED>",
+  "event_context": { "task_text": "<description>" },
+  "config": {
+    "moc_threshold_create": "<從 config.md 取值>",
+    "moc_threshold_split": "<從 config.md 取值>",
+    "recent_cards_count": "<從 config.md 取值>",
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": "<從 vault-index.json stats.domains 取值>"
+  },
+  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ]
+}
+```
+
+`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
+
+等待 subagent 完成後再回應使用者。Subagent 依照 `.gemini/skills/tm-post-op/SKILL.md` 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ Dashboard 重建（使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json）。
+
 ## 檔案結構
 
 `vault/PARA/Tasks/tasks.md` 分為兩個區塊：

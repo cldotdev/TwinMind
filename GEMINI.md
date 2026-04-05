@@ -295,8 +295,8 @@ AI 不得忽略模糊輸入。
 
 | 意圖 | Skill | post-op layer | Post-op 執行模式 | Link Inference 模式 |
 |------|-------|---------------|-----------------|-------------------|
-| `CAPTURE` | `tm-capture` | `knowledge` | Foreground subagent | Foreground subagent |
-| `INBOX` | `tm-inbox` | `action`（升格為 Card 時用 `both`） | Foreground subagent | Foreground subagent（升格為 Card 時） |
+| `CAPTURE` | `tm-capture` | `knowledge` | Foreground subagent | Inline（main agent） |
+| `INBOX` | `tm-inbox` | `action`（升格為 Card 時用 `both`） | Foreground subagent | Inline（升格為 Card 時） |
 | `ACTION` | `tm-action` | `action` | Foreground subagent | — |
 | `TASK` | `tm-task` | `action` | Foreground subagent | — |
 | `PROJECT` | `tm-project` | `action` | Foreground subagent | — |
@@ -319,12 +319,14 @@ Post-op subagent 根據 layer 參數執行不同收尾步驟：
 
 未指定 layer 時預設為 `both`。
 
+Changelog 採用月度切檔（`vault/System/changelog-YYYY-MM.md`）+ append-only 尾部追加。`vault/System/changelog.md` 為索引頁，列出各月連結（newest-first）。Post-op subagent 寫入 changelog 時不讀取既有內容。
+
 ### Subagent 委派協定
 
 #### 執行模式
 
 - **Post-op subagent**：以同步方式啟動 `post-op` subagent（定義於 `.gemini/agents/post-op.md`）。Main agent 等待 subagent 完成後再回應使用者。適用於 changelog、MOC、Home.md、Dashboard.md 等確定性重建操作。
-- **Link inference subagent**：以同步方式啟動 `link-inference` subagent（定義於 `.gemini/agents/link-inference.md`）。Main agent 等待 subagent 回傳建議清單後，根據使用者上下文決定採納哪些連結。
+- **Link inference**：由 main agent inline 執行，不使用 subagent。Main agent 利用 session 啟動時已載入 context 的 vault-index.json notes 資料直接進行語意比對。
 
 #### Prompt Payload 格式
 
@@ -338,30 +340,27 @@ Post-op subagent 根據 layer 參數執行不同收尾步驟：
   "layer": "knowledge | action | both",
   "event_type": "CARD_CREATED",
   "event_context": {
-    "card_id": "C019",
+    "card_id": "20260405130000",
     "card_title": "Rust Ownership",
     "card_path": "Cards/Rust-Ownership.md",
     "domains": ["technology"],
     "affected_project": null
-  }
-}
-```
-
-**Link inference payload：**
-
-```json
-{
-  "task": "link-inference",
-  "new_card": {
-    "id": "20260404103000",
-    "title": "Rust Ownership",
-    "summary": "Rust 的所有權機制...",
-    "domain": ["technology"],
-    "type": "concept"
   },
-  "vault_index_path": "vault/System/vault-index.json"
+  "config": {
+    "moc_threshold_create": 5,
+    "moc_threshold_split": 20,
+    "recent_cards_count": 5,
+    "vault_name": "TwinMind"
+  },
+  "domain_counts": { "technology": 5 },
+  "total_cards": 22,
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "2026-04-05", "status": "seed", "type": "concept", "domain": ["technology"] }
+  ]
 }
 ```
+
+`config`/`domain_counts`/`total_cards`/`recent_notes` 由 main agent 從 context 中已有的 config.md 和 vault-index.json 資料填充。Subagent 使用這些欄位，不再讀取 `config.md`（MOC 門檻）和 `vault-index.json`（domain 統計、recent cards）。
 
 #### 回傳訊息格式
 
@@ -386,7 +385,7 @@ Main agent 解析回傳訊息判斷成功或失敗。回傳訊息不包含 file 
 #### 錯誤處理
 
 - **Post-op subagent 失敗**：subagent 自行讀取 hook error 並重試一次。重試仍失敗則回傳失敗訊息，main agent 告知使用者。
-- **Link inference subagent 失敗**：main agent 跳過 link inference，通知使用者自動連結建議暫時不可用。
+- **Inline link inference 失敗**：main agent 跳過連結推理，Connections 保持 `（尚無連結）`，告知使用者自動連結建議暫時不可用。
 
 ### Hook 自動驗證
 

@@ -26,9 +26,22 @@ Calling skill 在 subagent prompt 中嵌入以下 JSON：
     // 專案操作：project_id, project_title
     // 連結操作：source_id, source_title, target_id, target_title, relation
     // Action/Task/Inbox/Area：對應 id 和 title
-  }
+  },
+  "config": {
+    "moc_threshold_create": 5,
+    "moc_threshold_split": 20,
+    "recent_cards_count": 5,
+    "vault_name": "TwinMind"
+  },
+  "domain_counts": { "technology": 5, "learning": 3 },
+  "total_cards": 22,
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "2026-04-05", "status": "seed", "type": "concept", "domain": ["technology"] }
+  ]
 }
 ```
+
+`config`、`domain_counts`、`total_cards`、`recent_notes` 由 calling skill 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。Subagent 使用這些欄位取代讀取 `config.md` 和 `vault-index.json`（MOC 檢查和 Home.md block 4）。
 
 ## 限制：不寫入 vault-index.json
 
@@ -52,9 +65,15 @@ Calling skill 在 subagent prompt 中嵌入以下 JSON：
 
 **所有 layer 都執行。**
 
-追加到 `vault/System/changelog.md`。從 payload 的 `event_type` 和 `event_context` 組裝紀錄內容。
+Append-only 寫入至月度 changelog 檔案 `vault/System/changelog-YYYY-MM.md`（YYYY-MM 為當前 UTC 日期的年月）。從 payload 的 `event_type` 和 `event_context` 組裝紀錄內容。**不讀取既有內容。**
 
-格式：
+**月度檔案自動建立：** 若 `changelog-YYYY-MM.md` 不存在，先以 write_file 建立檔案，內容為 `# Changelog YYYY-MM` + 空行，再 append 條目。
+
+**Append 方式：** 使用 run_shell_command `echo >> "vault/System/changelog-YYYY-MM.md"` 或等效的尾部追加方式寫入條目。不使用 read_file 或 replace 讀取既有內容。
+
+**索引頁維護：** 建立新月度檔案時，讀取 `vault/System/changelog.md`（索引頁），檢查是否已有該月連結。若無，在 `# Changelog` heading 後首行插入 `- [[changelog-YYYY-MM|YYYY-MM]]`（newest-first 排序）。若索引頁已有該月連結，不修改索引頁。
+
+條目格式（newest-at-bottom）：
 
 ```markdown
 ## <ISO 8601 timestamp>
@@ -88,8 +107,8 @@ MOC（Map of Content）是按領域自動組織卡片的索引頁。當某個 do
 
 從 payload 的 `event_context.domains` 取得受影響的 domain 列表。對每個 domain：
 
-1. 讀取 `vault/System/config.md` 的 `moc_threshold_create`（預設 5）和 `moc_threshold_split`（預設 20）
-2. 讀取 `vault/System/vault-index.json` 的 `stats.domains[<domain>]`
+1. 從 payload 的 `config.moc_threshold_create`（預設 5）和 `config.moc_threshold_split`（預設 20）取得門檻值。**不讀取 `config.md`。**
+2. 從 payload 的 `domain_counts[<domain>]` 取得該 domain 的卡片數。**不讀取 `vault-index.json`。**
 3. 判斷動作：
 
 | 條件 | 動作 |
@@ -106,7 +125,7 @@ MOC 的檔案結構、更新矩陣和拆分程序的完整定義，請讀取 `re
 
 **僅 `knowledge` 和 `both` 層執行。**
 
-Home.md 是知識庫的入口頁面，需要即時反映最新狀態。從 `vault/System/vault-index.json` 讀取資料，按以下 5 個區塊順序**完整重寫** `vault/Home.md`：
+Home.md 是知識庫的入口頁面，需要即時反映最新狀態。區塊 4（最近新增）從 payload 的 `recent_notes` 生成，**不讀取 vault-index.json**。其餘區塊（1/2/3/5）從 `vault/System/vault-index.json` 讀取資料。按以下 5 個區塊順序**完整重寫** `vault/Home.md`：
 
 **區塊 1 — 進行中專案**
 
@@ -127,7 +146,7 @@ Parent MOC 顯示子 MOC 加總。Sub-MOC 不單獨列出。
 
 **區塊 4 — 最近新增**
 
-從 `notes` 按 `id` 降序取前 N 筆（N = `config.md` 的 `recent_cards_count`，預設 5）。
+從 payload 的 `recent_notes` 陣列取得（已由 main agent 按 id 降序排好前 N 筆，N = `config.recent_cards_count`）。**不讀取 vault-index.json 或 config.md。**
 格式：`- <emoji> [[Cards/<slug>|<title>]] — <YYYY-MM-DD>`
 emoji：🌱 seed、🌿 growing、🌳 evergreen。Source 類型用 `Sources/<slug>`。
 空態：「尚無卡片」

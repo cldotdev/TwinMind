@@ -27,11 +27,26 @@ metadata:
     "target_id": "<ID>", "target_title": "<title>",
     "relation": "<relationship_type>",
     "domains": ["<affected domains>"]
-  }
+  },
+  "config": {
+    "moc_threshold_create": "<從 config.md 取值>",
+    "moc_threshold_split": "<從 config.md 取值>",
+    "recent_cards_count": "<從 config.md 取值>",
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": "<從 vault-index.json stats.domains 取值>"
+  },
+  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ]
 }
 ```
 
-等待 subagent 完成後再回應使用者。
+`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
+
+等待 subagent 完成後再回應使用者。Subagent 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ MOC 閾值檢查（使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json）+ Home.md 重建（使用 payload `recent_notes`，不重新讀取 vault-index.json 取最新卡片）。
 
 ## 建立連結
 

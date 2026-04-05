@@ -9,6 +9,38 @@ metadata:
 
 Inbox 是所有模糊輸入的安全網。人的大腦會在隨機時刻冒出想法——有些已成形，有些只是碎片。Inbox 的存在讓使用者不需要在靈感出現的那一刻決定「這是知識還是任務」，只要先記下來，之後再分類。
 
+一致性驗證由 AfterTool hooks 自動處理。狀態變更操作完成後啟動 foreground subagent 執行 post-op pipeline。唯讀查詢不需要。
+
+### Post-op Subagent 啟動方式
+
+透過 subagent（synchronous foreground execution）啟動，prompt 包含 post-op payload：
+
+```json
+{
+  "task": "post-op",
+  "layer": "<action（建立/捨棄）或 both（升格為 Card）>",
+  "event_type": "<INBOX_CREATED|INBOX_PROMOTED|INBOX_DISMISSED>",
+  "event_context": { "inbox_id": "<id>", "inbox_text": "<text>", "promoted_to": "<path 或 null>" },
+  "config": {
+    "moc_threshold_create": "<從 config.md 取值>",
+    "moc_threshold_split": "<從 config.md 取值>",
+    "recent_cards_count": "<從 config.md 取值>",
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": "<從 vault-index.json stats.domains 取值>"
+  },
+  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ]
+}
+```
+
+`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
+
+升格為 Card 時 `layer: "both"`，其餘用 `layer: "action"`。等待 subagent 完成後再回應使用者。Subagent 依照 `.gemini/skills/tm-post-op/SKILL.md` 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）。`layer: "both"` 時額外執行 MOC 閾值檢查（使用 payload `config` 和 `domain_counts`）+ Home.md 重建（使用 payload `recent_notes`）；`layer: "action"` 時執行 Dashboard 重建。
+
 ## 什麼該進 Inbox，什麼不該
 
 這是本 skill 最重要的判斷。Inbox 只收「還不確定要變成什麼」的想法，已經明確的輸入應該直接到目的地（跳過 Inbox 減少摩擦）：

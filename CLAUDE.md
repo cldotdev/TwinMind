@@ -400,4 +400,4 @@ PostToolUse hooks 會在以下寫入操作後自動執行驗證：
 
 ## Markdown 注意事項
 
-- **Tag 跳脫：** `#word` 在 Obsidian 中為 tag。非 tag 用途的 `#` 需跳脫為 `\#` 或用 backtick 包裹。常見非 tag 場景：程式語言名稱（`C#`、`F#`）、編號（`#1`、`#42`）、issue/PR 引用（`#123`）。
+- 在 **Markdown body text** 中，非 tag 用途的 `#` 需跳脫為 `\#` 或用 backtick 包裹。JSON 檔案和 YAML frontmatter 中，`#` 不需跳脫。常見非 tag 場景：程式語言名稱（`C#`、`F#`）、編號（`#1`、`#42`）、issue/PR 引用（`#123`）。

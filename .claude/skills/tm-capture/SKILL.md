@@ -61,7 +61,7 @@ related_projects: []
 
 若使用者輸入包含外部 URL（HTTP/HTTPS），在撰寫 body 前批次取得標題：
 
-1. 掃描使用者原始輸入，提取所有唯一的外部 URL（忽略 wiki-link `[[...]]`）
+1. 掃描使用者原始輸入中所有的外部 URL（行內、腳注定義、參考清單等，不包含 wiki-link），提取唯一值；不論該 URL 是否被正文引用，一律納入
 2. 若無 URL → 跳過此步驟
 3. 檢查使用者輸入中哪些 URL 已有明確標題（如「這篇《Rust 指南》 `https://...`」），直接寫入對照表
 4. 對**剩餘**沒有使用者標題的 URL 批次執行：`node scripts/fetch-title.mjs <url1> [url2] ...`

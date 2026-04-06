@@ -57,6 +57,22 @@ related_projects: []
 
 10 個必填欄位，全部要有值。新卡片固定 `status: seed`、`confidence: medium`。
 
+### Step 4.5 — URL 預處理
+
+若使用者輸入包含外部 URL（HTTP/HTTPS），在撰寫 body 前批次取得標題：
+
+1. 掃描使用者原始輸入，提取所有唯一的外部 URL（忽略 wiki-link `[[...]]`）
+2. 若無 URL → 跳過此步驟
+3. 檢查使用者輸入中哪些 URL 已有明確標題（如「這篇《Rust 指南》 `https://...`」），直接寫入對照表
+4. 對**剩餘**沒有使用者標題的 URL 批次執行：`node scripts/fetch-title.mjs <url1> [url2] ...`
+5. 合併結果建立 url→title 對照表，優先序：
+   - 使用者標題（步驟 3）
+   - fetch 標題（步驟 4）
+   - URL path slug 推測並翻譯為 locale 語言（如 `/my-great-post` → `我的好文章`）
+   - 以上皆不可行 → 留空（body 撰寫時用裸連結 `<url>`）
+
+對照表供 Step 5 body 撰寫使用。Fetch 失敗不阻擋建卡流程。
+
 ### Step 5 — 寫入卡片檔案
 
 ```markdown
@@ -66,7 +82,7 @@ related_projects: []
 
 # <title>
 
-<使用者輸入重整為原子化筆記內容>
+<使用者輸入重整為原子化筆記內容；外部 URL 以 Step 4.5 對照表格式化為 [title](url)>
 
 ## Connections
 
@@ -98,6 +114,7 @@ related_projects: []
 原子更新 `vault/System/vault-index.json`：
 
 1. 在 `notes` 新增條目（key 為 timestamp ID）：
+
    ```json
    {
      "title": "<title>",
@@ -111,6 +128,7 @@ related_projects: []
      "link_count": "<Step 5.5 計算或 0>"
    }
    ```
+
 2. `stats.total_cards` += 1
 3. 每個 domain：`stats.domains[tag]` += 1（不存在則初始化為 1）
 4. `stats.last_updated` = 當前 ISO 8601
@@ -123,7 +141,7 @@ related_projects: []
 
 透過 Agent tool（`run_in_background: true`）啟動 subagent，prompt 包含：
 
-```
+```text
 你是 TwinMind post-op subagent。執行 post-op pipeline 收尾工作。
 
 ## 輸入
@@ -185,8 +203,8 @@ related_projects: []
 1. 從 `vault-index.json` 查找目標卡片
 2. 找不到 → 回報「未找到匹配的卡片」
 3. 找到後：
-   a. 刪除卡片 `.md` 檔案
-   b. 原子更新 `vault-index.json`：
+   1. 刪除卡片 `.md` 檔案
+   2. 原子更新 `vault-index.json`：
       - 移除 `notes` 條目
       - `stats.total_cards` -= 1
       - 每個 domain：`stats.domains[tag]` -= 1（歸零刪 key）
@@ -194,4 +212,4 @@ related_projects: []
       - 重算受影響 notes 的 `link_count` 和 `stats.total_links`
       - 檢查 `related_projects`，對每個專案：`projects[name].card_refs` -= 1（最小 0）
       - 更新 `stats.last_updated`
-   c. 啟動 post-op background subagent（同 Step 7 格式，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）
+   3. 啟動 post-op background subagent（同 Step 7 格式，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）

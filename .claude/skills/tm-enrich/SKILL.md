@@ -92,9 +92,25 @@ Post-op payload：
     "card_path": "<path>",
     "domains": ["<domain>"],
     "status_change": "<old_status>→<new_status>"
-  }
+  },
+  "config": {
+    "moc_threshold_create": "<從 config.md 取值>",
+    "moc_threshold_split": "<從 config.md 取值>",
+    "recent_cards_count": "<從 config.md 取值>",
+    "vault_name": "<從 config.md 取值>"
+  },
+  "domain_counts": {
+    "<domain>": "<從 vault-index.json stats.domains 取值>"
+  },
+  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
+  "recent_notes": [
+    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
+  ],
+  "changelog_path": "vault/System/changelog-YYYY-MM.md",
+  "existing_moc_titles": ["Technology", "Learning"]
 }
 ```
+`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得。Subagent 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ MOC 閾值檢查（使用 payload `config` 和 `domain_counts`）+ Home.md 重建（使用 payload `recent_notes`，不重新讀取 vault-index.json 取最新卡片）。
 
 ---
 

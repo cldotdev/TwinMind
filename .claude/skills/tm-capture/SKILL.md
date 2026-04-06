@@ -93,27 +93,44 @@ related_projects: []
 
 若 vault 為空（`notes` 為空物件），跳過連結推理，直接保持 `（尚無連結）`。
 
-### Step 6 — 更新索引
+### Step 6 — 更新索引（單次 Edit）
 
-原子更新 `vault/System/vault-index.json`：
+以**單次 Edit tool invocation** 原子更新 `vault/System/vault-index.json`。禁止拆分為多次 Edit——每次 Edit 都會觸發 hook 驗證，中間狀態必然違反不變式。
 
+**操作方式：** `old_string` 必須涵蓋一段連續的 JSON 區塊，包含所有需要變更的部分。`new_string` 包含完整更新後的版本。
+
+**需要在同一次 Edit 中完成的所有變更：**
 1. 在 `notes` 新增條目（key 為 timestamp ID）：
    ```json
-   {
+   "<ID>": {
      "title": "<title>",
      "path": "Cards/<slug>.md",
      "type": "<type>",
      "status": "seed",
      "domain": ["<domain1>"],
      "summary": "<一句話摘要>",
-     "links_to": ["<Step 5.5 採納的連結目標 ID，或空>"],
-     "linked_from": ["<Step 5.5 反向連結來源 ID，或空>"],
-     "link_count": "<Step 5.5 計算或 0>"
+     "links_to": ["<Step 5.5 採納的連結目標 ID，或空陣列>"],
+     "linked_from": [],
+     "link_count": <連結數或 0>
    }
    ```
-2. `stats.total_cards` += 1
-3. 每個 domain：`stats.domains[tag]` += 1（不存在則初始化為 1）
-4. `stats.last_updated` = 當前 ISO 8601
+2. 若 Step 5.5 有連結目標：更新每個 target note 的 `linked_from`（加入新卡 ID）和 `link_count`
+3. `stats.total_cards` += 1
+4. `stats.total_links` += 新增連結數
+5. 每個 domain：`stats.domains[tag]` += 1（不存在則初始化為 1）
+6. `stats.last_updated` = 當前 ISO 8601
+
+**範例——建卡有 1 個連結目標時的 Edit 範圍：**
+
+`old_string` 涵蓋：最後一個既有 note entry 尾部 + `stats` 物件（含 target note entry，若不連續則擴大範圍至涵蓋所有受影響區塊）。
+
+`new_string` 包含：原始區塊 + 新 note entry 插入 + target note 的 `linked_from`/`link_count` 已更新 + `stats` 數值已更新。
+
+**範例——建卡無連結時的 Edit 範圍：**
+
+`old_string` 涵蓋：最後一個既有 note entry 尾部 + `stats` 物件。
+
+`new_string` 包含：原始尾部 + 新 note entry + `stats` 數值已更新（`total_cards` +1、`domains` 更新、`last_updated` 更新）。
 
 ### Step 7 — 啟動 post-op（Background Subagent）
 
@@ -149,16 +166,20 @@ related_projects: []
   "total_cards": <從 vault-index.json stats.total_cards 取值>,
   "recent_notes": [
     { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
-  ]
+  ],
+  "changelog_path": "vault/System/changelog-YYYY-MM.md",
+  "existing_moc_titles": ["Technology", "Learning"]
 }
 
 `config`、`domain_counts`、`total_cards` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
 `recent_notes` 為 vault-index.json notes 按 id 降序取前 N 筆（N = config.recent_cards_count），每筆含 title/path/created/status/type/domain。
+`changelog_path` 由 main agent 取當前月份計算（格式 `vault/System/changelog-YYYY-MM.md`）。
+`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得所有 MOC 檔案標題（無 MOC 時為空陣列）。
 
 ## 執行步驟
 依照 .claude/skills/tm-post-op/SKILL.md 的完整程序執行：
-1. 寫入 changelog（event_type + event_context）— append-only 至 changelog-YYYY-MM.md
-2. MOC 觸發檢查（從 payload 的 config 和 domain_counts 取值，不讀 config.md 和 vault-index.json）
+1. 寫入 changelog（event_type + event_context）— 直接寫入 `changelog_path` 指定的檔案，不讀 changelog.md 索引頁來判斷月份
+2. MOC 觸發檢查（從 payload 的 config 和 domain_counts 取值，用 `existing_moc_titles` 判斷 MOC 是否存在，不讀 config.md、vault-index.json、不 glob Atlas/）
 3. Home.md 重新生成（Recent Cards 從 payload 的 recent_notes 生成，其餘區塊讀 vault-index.json）
 
 不寫入 vault-index.json。MOC 變更包含在回傳訊息中。
@@ -186,12 +207,16 @@ related_projects: []
 2. 找不到 → 回報「未找到匹配的卡片」
 3. 找到後：
    a. 刪除卡片 `.md` 檔案
-   b. 原子更新 `vault-index.json`：
-      - 移除 `notes` 條目
-      - `stats.total_cards` -= 1
-      - 每個 domain：`stats.domains[tag]` -= 1（歸零刪 key）
-      - 清理其他 notes 的 `links_to`/`linked_from` 中該卡片 ID
-      - 重算受影響 notes 的 `link_count` 和 `stats.total_links`
-      - 檢查 `related_projects`，對每個專案：`projects[name].card_refs` -= 1（最小 0）
-      - 更新 `stats.last_updated`
+   b. **全量重寫** `vault-index.json`（Read → 記憶體計算 → Write，共 2 次工具調用）：
+      1. 用 Read 工具讀取完整 `vault-index.json`
+      2. 在記憶體中執行所有變更：
+         - 移除 `notes` 條目
+         - `stats.total_cards` -= 1
+         - 每個 domain：`stats.domains[tag]` -= 1（歸零刪 key）
+         - 清理其他 notes 的 `links_to`/`linked_from` 中該卡片 ID
+         - 重算受影響 notes 的 `link_count`
+         - 重算 `stats.total_links`（所有 `links_to` 長度總和）
+         - 檢查 `related_projects`，對每個專案：`projects[name].card_refs` -= 1（最小 0）
+         - 更新 `stats.last_updated`
+      3. 用 Write 工具將完整 JSON 物件寫回 `vault-index.json`（單次寫入，不使用 Edit）
    c. 啟動 post-op background subagent（同 Step 7 格式，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）

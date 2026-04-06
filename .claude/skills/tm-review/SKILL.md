@@ -76,7 +76,7 @@ metadata:
 
 ### 完整重建（需啟動 post-op subagent）
 
-既有 index 有資料時先確認再覆寫。掃描所有 `.md`、重建 notes/stats/links、保留 projects/areas。完整程序請讀取 `references/index-rebuild.md`。
+既有 index 有資料時先確認再覆寫。掃描所有 `.md`、重建 notes/stats/links、保留 projects/areas。寫入前執行九項一致性不變式驗證，發現不一致時在記憶體中修正後再寫入，並在摘要中報告修正項目。完整程序請讀取 `references/index-rebuild.md`。
 
 ## Inbox Triage 過期提醒
 

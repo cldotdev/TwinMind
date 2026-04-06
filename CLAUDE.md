@@ -1,3 +1,32 @@
+
+<!-- SPECTRA:START v1.0.1 -->
+
+# Spectra Instructions
+
+This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
+
+## Use `/spectra:*` skills when:
+
+- A discussion needs structure before coding → `/spectra:discuss`
+- User wants to plan, propose, or design a change → `/spectra:propose`
+- Tasks are ready to implement → `/spectra:apply`
+- There's an in-progress change to continue → `/spectra:ingest`
+- User asks about specs or how something works → `/spectra:ask`
+- Implementation is done → `/spectra:archive`
+
+## Workflow
+
+discuss? → propose → apply ⇄ ingest → archive
+
+- `discuss` is optional — skip if requirements are clear
+- Requirements change mid-work? Plan mode → `ingest` → resume `apply`
+
+## Parked Changes
+
+Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra:apply` and `/spectra:ingest` skills handle parked changes automatically.
+
+<!-- SPECTRA:END -->
+
 # TwinMind 知識庫操作指南
 
 本專案是 AI 主導的知識管理系統。使用者透過 terminal 自然語言輸入，AI 全權處理建卡、更新、刪除、連結、MOC 等操作。Obsidian 僅做唯讀瀏覽。
@@ -292,6 +321,16 @@ AI 不得忽略模糊輸入。
 | `REVIEW` | `tm:review` | 僅索引修復/重建後（`both`） | Background subagent | — |
 | `CONNECT` | `tm:connect` | `knowledge` | Background subagent | — |
 
+### Plan Mode 檢查
+
+Vault 寫入操作（tm:capture、tm:connect、tm:inbox、tm:action、tm:task、tm:project、tm:area）執行前，意圖路由層 SHALL 檢查 plan mode 是否 active。若 plan mode active：
+
+- 告知使用者 vault 操作需要退出 plan mode，提議退出
+- 不嘗試執行寫入操作
+- 唯讀操作（tm:query）不受影響，可正常執行
+
+Background subagent 在 plan mode 下不啟動。改為記錄 post-op payload，待 plan mode 退出後由 main agent inline 執行。
+
 ### Post-op 規則
 
 狀態變更操作完成後，對應 skill **不再透過 Skill tool 調用 `/tm:post-op`**，改為透過 Agent tool 啟動 background subagent 執行 post-op pipeline。Main agent 在啟動 subagent 後立即回應使用者，不需等待 post-op 完成。
@@ -342,11 +381,13 @@ Changelog 採用月度切檔（`vault/System/changelog-YYYY-MM.md`）+ append-on
   "total_cards": 22,
   "recent_notes": [
     { "title": "...", "path": "...", "created": "2026-04-05", "status": "seed", "type": "concept", "domain": ["technology"] }
-  ]
+  ],
+  "changelog_path": "vault/System/changelog-2026-04.md",
+  "existing_moc_titles": ["Technology", "Learning"]
 }
 ```
 
-`config`/`domain_counts`/`total_cards`/`recent_notes` 由 main agent 從 context 中���有的 config.md 和 vault-index.json 資料填充。Subagent 使用這些欄位，不再讀取 `config.md`（MOC 門檻）和 `vault-index.json`（domain 統計、recent cards）。
+`config`/`domain_counts`/`total_cards`/`recent_notes` 由 main agent 從 context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算（格式 `vault/System/changelog-YYYY-MM.md`）。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得所有 MOC 檔案標題（無 MOC 時為空陣列）。Subagent 使用這些欄位，不再讀取 `config.md`、`vault-index.json`、`changelog.md` 索引頁，也不 glob `Atlas/`。
 
 #### 回傳訊息格式
 
@@ -365,6 +406,8 @@ Main agent 解析回傳訊息判斷成功或失敗。回傳訊息不包含 file 
 3. Main agent 回應使用者
 4. Main agent 啟動 background subagent（subagent 只讀 vault-index.json，寫入 changelog/MOC/Home/Dashboard）
 
+**DELETE 操作的索引更新**使用 Write（非 Edit）策略：Read → 記憶體計算 → Write 全量重寫，工具調用預期為 2 次（1 Read + 1 Write）。這消除了多次 Edit 可能造成的 trailing comma 和分步不一致風險。
+
 **Post-op subagent 不寫入 vault-index.json。** MOC 變更透過 return message 回報。
 
 #### 錯誤處理
@@ -381,4 +424,4 @@ PostToolUse hooks 會在以下寫入操作後自動執行驗證：
 - **`PARA/Projects/*/actions.md|tasks.md` 寫入後** → 驗證 project 欄位匹配目錄名
 - **`vault-index.json` 寫入後** → 驗證 JSON 合法性和九項一致性不變式（total_cards、total_links、雙向連結、domain 計數、version、inbox count、actions count、standalone tasks count）
 
-驗證失敗會 block 寫入並回報具體錯誤。**AI 不需手動執行一致性驗證——hooks 已自動處理。**
+驗證失敗會 回報錯誤信號（exit code 2），但檔案已被寫入（PostToolUse 是事後偵測控制，非事前攔截）。**AI 收到 hook 失敗時，須��即讀回檔案確認實際狀態，再以單次 corrective Edit 修正不一致。** AI 不需手動執行一致性驗證——hooks 已自��處理。

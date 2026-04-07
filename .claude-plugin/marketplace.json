@@ -1,0 +1,17 @@
+{
+  "name": "twinmind",
+  "owner": {
+    "name": "VolderLu"
+  },
+  "plugins": [
+    {
+      "name": "twinmind",
+      "source": ".",
+      "description": "AI-driven personal knowledge and project management system integrating Zettelkasten, LYT, and PARA methods",
+      "version": "0.1.0",
+      "homepage": "https://github.com/VolderLu/TwinMind",
+      "license": "MIT",
+      "keywords": ["zettelkasten", "knowledge-management", "para", "obsidian"]
+    }
+  ]
+}

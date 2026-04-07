@@ -5,6 +5,7 @@
 
 import { get as httpsGet } from "node:https";
 import { get as httpGet } from "node:http";
+import { lookup } from "node:dns/promises";
 
 const MAX_REDIRECTS = 5;
 const MAX_BYTES = 1048576;
@@ -15,6 +16,41 @@ const TITLE_RE = /<title[^>]*>([\s\S]*?)<\/title>/i;
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// SSRF protection: reject private, reserved, and cloud metadata IPs
+function isPrivateIP(ip) {
+  // Handle IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+  const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+  // IPv4 private/reserved ranges
+  const parts = normalized.split(".").map(Number);
+  if (parts.length === 4) {
+    const [a, b] = parts;
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a === 127) return true; // 127.0.0.0/8
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local + cloud metadata)
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a >= 224) return true; // multicast + reserved
+  }
+  // IPv6 private/reserved
+  if (normalized === "::1" || normalized === "::") return true;
+  if (normalized.startsWith("fe80:")) return true; // link-local
+  if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // unique local
+  return false;
+}
+
+// Best-effort SSRF guard: resolves hostname and rejects private IPs.
+// Note: DNS rebinding (TTL=0) can cause http.get to resolve a different IP
+// than the one checked here. A full fix requires a custom lookup agent, which
+// is out of scope for a title-fetching utility.
+async function validateUrl(url) {
+  const { hostname } = new URL(url);
+  const { address } = await lookup(hostname);
+  if (isPrivateIP(address)) {
+    throw new Error(`Blocked: ${hostname} resolves to private IP ${address}`);
+  }
+}
 
 function extractTitle(html) {
   const t = html.match(TITLE_RE);
@@ -37,13 +73,14 @@ function decodeTitle(raw) {
     .trim();
 }
 
-function fetchTitle(url, redirects = 0) {
-  return new Promise((resolve, reject) => {
-    if (redirects > MAX_REDIRECTS) {
-      reject(new Error("Too many redirects"));
-      return;
-    }
+async function fetchTitle(url, redirects = 0) {
+  if (redirects > MAX_REDIRECTS) {
+    throw new Error("Too many redirects");
+  }
 
+  await validateUrl(url);
+
+  return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? httpsGet : httpGet;
 
     const req = client(
@@ -68,16 +105,28 @@ function fetchTitle(url, redirects = 0) {
           return;
         }
 
-        let buf = "";
         let bytes = 0;
         let found = false;
+        let buf = "";
 
-        res.setEncoding("utf8");
-        res.on("error", reject);
+        // Detect charset from Content-Type header, fall back to UTF-8
+        const ctHeader = res.headers["content-type"] || "";
+        const charsetMatch = ctHeader.match(/charset=([^\s;]+)/i);
+        const rawCharset = charsetMatch ? charsetMatch[1].replace(/['"]/g, "") : "utf-8";
+        let decoder;
+        try {
+          decoder = new TextDecoder(rawCharset, { fatal: false });
+        } catch {
+          decoder = new TextDecoder("utf-8", { fatal: false });
+        }
+
+        res.on("error", (err) => {
+          if (!found) reject(err);
+        });
         res.on("data", (chunk) => {
           if (found) return;
-          bytes += Buffer.byteLength(chunk);
-          buf += chunk;
+          bytes += chunk.length;
+          buf += decoder.decode(chunk, { stream: true });
 
           const title = extractTitle(buf);
           if (title) {
@@ -94,6 +143,7 @@ function fetchTitle(url, redirects = 0) {
 
         res.on("end", () => {
           if (found) return;
+          buf += decoder.decode();
           const title = extractTitle(buf);
           if (title) resolve(title);
           else reject(new Error("No title found"));

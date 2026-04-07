@@ -57,6 +57,22 @@ related_projects: []
 
 10 個必填欄位，全部要有值。新卡片固定 `status: seed`、`confidence: medium`。
 
+### Step 4.5 — URL 預處理
+
+若使用者輸入包含外部 URL（HTTP/HTTPS），在撰寫 body 前批次取得標題：
+
+1. 掃描使用者原始輸入中所有的外部 URL（行內、腳注定義、參考清單等，不包含 wiki-link），提取唯一值；不論該 URL 是否被正文引用，一律納入
+2. 若無 URL → 跳過此步驟
+3. 檢查使用者輸入中哪些 URL 已有明確標題（如「這篇《Rust 指南》 `https://...`」），直接寫入對照表
+4. 對**剩餘**沒有使用者標題的 URL 批次執行：`node scripts/fetch-title.mjs <url1> [url2] ...`
+5. 合併結果建立 url→title 對照表，優先序：
+   - 使用者標題（步驟 3）
+   - fetch 標題（步驟 4）
+   - URL path slug 推測並翻譯為 locale 語言（如 `/my-great-post` → `我的好文章`）。slug 推測的標題前加 `~` 標記（如 `[~我的好文章](url)`），讓讀者知道這不是頁面原始標題
+   - 以上皆不可行 → 留空（body 撰寫時用裸連結 `<url>`）
+
+對照表供 Step 5 body 撰寫使用。Fetch 失敗不阻擋建卡流程。
+
 ### Step 5 — 寫入卡片檔案
 
 ```markdown
@@ -126,9 +142,11 @@ node scripts/post-op.mjs --layer knowledge --event '{"event_type":"<CARD_CREATED
 4. `updated` 設為當天日期。`id` 和 `created` 不得修改
 5. 寫回檔案
 6. 透過 Bash tool 執行程式化索引更新（**不得直接 Edit vault-index.json**）：
+
    ```bash
    node scripts/update-index.mjs update-card '{"id":"<ID>","<field>":"<value>"}'
    ```
+
    payload 僅包含 `id` 和**實際變更的欄位**（title、type、status、domain、summary）。腳本自動處理 domain diff 計算（舊 domain -1 歸零刪 key、新 domain +1）和 `stats.last_updated` 更新。
 7. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type 為 `CARD_UPDATED`，event_context 含變更摘要）
 
@@ -139,8 +157,10 @@ node scripts/post-op.mjs --layer knowledge --event '{"event_type":"<CARD_CREATED
 3. 找到後：
    a. 刪除卡片 `.md` 檔案
    b. 透過 Bash tool 執行程式化索引更新（**不得直接 Read/Write vault-index.json**）：
+
       ```bash
       node scripts/update-index.mjs delete-card '{"id":"<ID>"}'
       ```
+
       腳本自動處理：移除 notes 條目、清理所有雙向連結引用（`links_to`/`linked_from`）、重算 `link_count`、重算 `stats.total_links`、更新 `stats.total_cards`/`stats.domains`/`stats.last_updated`
    c. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）

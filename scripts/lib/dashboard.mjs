@@ -2,44 +2,19 @@
  * dashboard.mjs — Regenerate vault/PARA/Dashboard.md from vault-index.json
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
-
-function parseYamlFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-  const result = {};
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^(\w+):\s*(.*)/);
-    if (m) {
-      const key = m[1];
-      const raw = m[2].trim().replace(/^["']|["']$/g, '');
-      result[key] = raw === '' ? null : (isNaN(raw) || raw === '' ? raw : Number(raw));
-    }
-  }
-  return result;
-}
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { readProjectMeta } from './project-meta.mjs';
 
 function progressBar(done, total) {
   if (total === 0) return '░░░░░░░░░░ 0%';
   const pct = done / total;
   const filled = Math.round(pct * 10);
-  const pctLabel = Math.round(pct * 100) + '%';
-  return '█'.repeat(filled) + '░'.repeat(10 - filled) + ' ' + pctLabel;
+  const pctLabel = `${Math.round(pct * 100)}%`;
+  return `${'█'.repeat(filled)}${'░'.repeat(10 - filled)} ${pctLabel}`;
 }
 
-function readProjectMeta(projectsDir, projectId) {
-  const goalPath = join(projectsDir, projectId, 'goal.md');
-  if (!existsSync(goalPath)) return { title: projectId, deadline: null };
-  const content = readFileSync(goalPath, 'utf8');
-  const fm = parseYamlFrontmatter(content);
-  return {
-    title: (fm.title || projectId).replace(/^["']|["']$/g, ''),
-    deadline: fm.deadline || null,
-  };
-}
-
-export async function regenerateDashboard({ event, vaultRoot }) {
+export async function regenerateDashboard({ vaultRoot }) {
   const indexPath = join(vaultRoot, 'System', 'vault-index.json');
   const dashPath = join(vaultRoot, 'PARA', 'Dashboard.md');
   const projectsDir = join(vaultRoot, 'PARA', 'Projects');

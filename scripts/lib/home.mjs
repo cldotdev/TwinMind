@@ -2,23 +2,10 @@
  * home.mjs — Regenerate vault/Home.md from vault-index.json
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
-import { join } from 'path';
-
-function parseYamlFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-  const result = {};
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^(\w+):\s*(.*)/);
-    if (m) {
-      const key = m[1];
-      const raw = m[2].trim().replace(/^["']|["']$/g, '');
-      result[key] = raw === '' ? null : (isNaN(raw) || raw === '' ? raw : Number(raw));
-    }
-  }
-  return result;
-}
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolveConfig } from './resolve-config.mjs';
+import { readProjectMeta } from './project-meta.mjs';
 
 function statusEmoji(status) {
   return { seed: '🌱', growing: '🌿', evergreen: '🌳' }[status] || '🌱';
@@ -38,39 +25,23 @@ function countMocCards(mocPath) {
     const match = content.match(/\*(\d+) cards/);
     if (match) return parseInt(match[1], 10);
     // Count bullet items in the file (exclude non-card lines)
-    return (content.match(/^- [🌱🌿🌳]/gm) || []).length;
+    return (content.match(/^- [🌱🌿🌳]/gmu) || []).length;
   } catch {
     return 0;
   }
 }
 
-/**
- * Read a project goal.md to get title and deadline.
- */
-function readProjectMeta(projectsDir, projectId) {
-  const goalPath = join(projectsDir, projectId, 'goal.md');
-  if (!existsSync(goalPath)) return { title: projectId, deadline: null };
-  const content = readFileSync(goalPath, 'utf8');
-  const fm = parseYamlFrontmatter(content);
-  return {
-    title: (fm.title || projectId).replace(/^["']|["']$/g, ''),
-    deadline: fm.deadline || null,
-  };
-}
-
-export async function regenerateHome({ event, vaultRoot }) {
+export async function regenerateHome({ vaultRoot }) {
   const indexPath = join(vaultRoot, 'System', 'vault-index.json');
-  const configPath = join(vaultRoot, 'System', 'config.md');
   const homePath = join(vaultRoot, 'Home.md');
   const atlasDir = join(vaultRoot, 'Atlas');
   const projectsDir = join(vaultRoot, 'PARA', 'Projects');
 
   const index = JSON.parse(readFileSync(indexPath, 'utf8'));
-  const config = parseYamlFrontmatter(readFileSync(configPath, 'utf8'));
+  const config = resolveConfig();
   const recentCount = config.recent_cards_count ?? 5;
 
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const today = now.slice(0, 10);
 
   // --- Block 1: Active Projects ---
   const activeProjects = Object.entries(index.projects ?? {})
@@ -130,7 +101,7 @@ export async function regenerateHome({ event, vaultRoot }) {
       const emoji = statusEmoji(n.status);
       const slug = n.path.replace(/^.*?\//, '').replace(/\.md$/, '');
       const folder = n.path.startsWith('Sources/') ? 'Sources' : 'Cards';
-      const date = id.slice(0, 4) + '-' + id.slice(4, 6) + '-' + id.slice(6, 8);
+      const date = `${id.slice(0, 4)}-${id.slice(4, 6)}-${id.slice(6, 8)}`;
       return `- ${emoji} [[${folder}/${slug}|${n.title}]] — ${date}`;
     }).join('\n');
   }

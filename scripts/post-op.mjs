@@ -10,16 +10,13 @@
  *   1 — failure (error printed to stderr)
  */
 
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { resolveVaultRoot } from './lib/resolve-config.mjs';
 import { writeChangelog } from './lib/changelog.mjs';
 import { checkMOC } from './lib/moc.mjs';
 import { regenerateHome } from './lib/home.mjs';
 import { regenerateDashboard } from './lib/dashboard.mjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const vaultRoot = resolve(__dirname, '..', 'vault');
+const vaultRoot = resolveVaultRoot();
 
 // --- CLI argument parsing ---
 

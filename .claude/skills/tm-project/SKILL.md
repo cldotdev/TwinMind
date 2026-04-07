@@ -9,43 +9,21 @@ metadata:
 
 管理知識庫中的專案——從建立到歸檔的完整生命週期。專案是行動導向的容器，將相關卡片組織在共同目標下。與卡片（知識）不同，專案有明確的開始和結束。
 
-一致性驗證由 PostToolUse hooks 自動處理。狀態變更操作完成後啟動 background subagent 執行 post-op pipeline（`layer: "action"`）。唯讀查詢不需要。
+一致性驗證由 PostToolUse hooks 自動處理。狀態變更操作完成後透過 Bash tool 執行 `node scripts/post-op.mjs --layer action` 觸發 post-op pipeline。唯讀查詢不需要。
 
-### Post-op Subagent 啟動方式
+### Post-op 執行方式
 
-透過 Agent tool（`run_in_background: true`）啟動 subagent，prompt 包含 post-op payload：
-```json
-{
-  "task": "post-op",
-  "layer": "action",
-  "event_type": "<PROJECT_CREATED|PAUSED|RESUMED|COMPLETED|ARCHIVED|...>",
-  "event_context": { "project_id": "<name>", "project_title": "<title>" },
-  "config": {
-    "moc_threshold_create": "<從 config.md 取值>",
-    "moc_threshold_split": "<從 config.md 取值>",
-    "recent_cards_count": "<從 config.md 取值>",
-    "vault_name": "<從 config.md 取值>"
-  },
-  "domain_counts": {
-    "<domain>": "<從 vault-index.json stats.domains 取值>"
-  },
-  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
-  "recent_notes": [
-    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
-  ],
-  "changelog_path": "vault/System/changelog-YYYY-MM.md",
-  "existing_moc_titles": ["Technology", "Learning"]
-}
+透過 Bash tool 執行：
+```bash
+node scripts/post-op.mjs --layer action --event '{"event_type":"<PROJECT_CREATED|PAUSED|RESUMED|COMPLETED|ARCHIVED|...>","event_context":{"project_id":"<name>","project_title":"<title>"}}'
 ```
-`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得。
-
-啟動後立即回應使用者。Subagent 依照 `.claude/skills/tm-post-op/SKILL.md` 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ Dashboard 重建。Dashboard 重建使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json。
+腳本同步執行，執行完成後再回應使用者。
 
 ## 專案操作
 
 所有生命週期操作的完整步驟程序（含狀態轉換表、檔案結構、卡片關聯、Action/Task 管理），請讀取 `references/project-lifecycle.md`。
 
-### 狀態變更操作（需啟動 post-op subagent）
+### 狀態變更操作（需執行 post-op（Bash tool））
 
 **建立專案**：建立 `PARA/Projects/<name>/` 目錄，含 `goal.md`（frontmatter + 目標描述）、`log.md`、`actions.md`、`tasks.md`。更新 `PARA/Projects/_index.md` 和 `vault-index.json` 的 `projects`（含 `actions: []`、`tasks_total: 0`、`tasks_done: 0`）。
 
@@ -59,7 +37,7 @@ metadata:
 
 **進度紀錄**：向 `log.md` 追加日期區塊。任何狀態皆可紀錄。
 
-### 專案內 Action 操作（需啟動 post-op subagent）
+### 專案內 Action 操作（需執行 post-op（Bash tool））
 
 **新增 Action**：在 `PARA/Projects/<name>/actions.md` 追加 H2 區塊（含 status: active、created、description），更新 `vault-index.json` 的 `projects[name].actions` 陣列。
 
@@ -67,7 +45,7 @@ metadata:
 
 **列出 Actions**：讀取 `actions.md` 顯示所有 action 的標題和狀態。
 
-### 專案內 Task 操作（需啟動 post-op subagent）
+### 專案內 Task 操作（需執行 post-op（Bash tool））
 
 **新增 Task（專案直屬）**：在 `PARA/Projects/<name>/tasks.md` 追加 `- [ ] <description>`。更新 `vault-index.json` 的 `projects[name].tasks_total`。
 

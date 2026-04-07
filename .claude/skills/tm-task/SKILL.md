@@ -9,37 +9,15 @@ metadata:
 
 獨立任務是系統中最小的「做」單位——「買牛奶」不值得建一個 Action 檔案，更不值得建一個 Project。所有獨立任務集中在 `vault/PARA/Tasks/tasks.md` 單一檔案中，用 checklist 格式管理，在 Obsidian 中一目了然。
 
-一致性驗證由 PostToolUse hooks 自動處理。狀態變更操作完成後啟動 background subagent 執行 post-op pipeline（`layer: "action"`）。唯讀查詢不需要。
+一致性驗證由 PostToolUse hooks 自動處理。狀態變更操作完成後透過 Bash tool 執行 `node scripts/post-op.mjs --layer action` 觸發 post-op pipeline。唯讀查詢不需要。
 
-### Post-op Subagent 啟動方式
+### Post-op 執行方式
 
-透過 Agent tool（`run_in_background: true`）啟動 subagent，prompt 包含 post-op payload：
-```json
-{
-  "task": "post-op",
-  "layer": "action",
-  "event_type": "<TASK_CREATED|TASK_COMPLETED|TASK_DELETED>",
-  "event_context": { "task_text": "<description>" },
-  "config": {
-    "moc_threshold_create": "<從 config.md 取值>",
-    "moc_threshold_split": "<從 config.md 取值>",
-    "recent_cards_count": "<從 config.md 取值>",
-    "vault_name": "<從 config.md 取值>"
-  },
-  "domain_counts": {
-    "<domain>": "<從 vault-index.json stats.domains 取值>"
-  },
-  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
-  "recent_notes": [
-    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
-  ],
-  "changelog_path": "vault/System/changelog-YYYY-MM.md",
-  "existing_moc_titles": ["Technology", "Learning"]
-}
+透過 Bash tool 執行：
+```bash
+node scripts/post-op.mjs --layer action --event '{"event_type":"<TASK_CREATED|TASK_COMPLETED|TASK_DELETED>","event_context":{"task_text":"<description>"}}'
 ```
-`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得。
-
-啟動後立即回應使用者。Subagent 依照 `.claude/skills/tm-post-op/SKILL.md` 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ Dashboard 重建（使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json）。
+腳本同步執行，執行完成後再回應使用者。
 
 ## 檔案結構
 
@@ -52,17 +30,17 @@ Frontmatter 只有一個 `updated` 欄位，每次修改時更新為當天。
 
 ## 新增 Task
 
-在 `## Active` 末尾追加 `- [ ] <description>`。更新 `vault-index.json`：`standalone_tasks` 追加 `{ "text": "<description>", "done": false }`，`stats.total_tasks_standalone` += 1。啟動 post-op background subagent（layer: action）。
+在 `## Active` 末尾追加 `- [ ] <description>`。更新 `vault-index.json`：`standalone_tasks` 追加 `{ "text": "<description>", "done": false }`，`stats.total_tasks_standalone` += 1。執行 post-op（Bash tool，`node scripts/post-op.mjs --layer action --event '...'`）。
 
 ## 完成 Task
 
 從 `## Active` 移除該行，在 `## Done` 追加 `- [x] <description>（YYYY-MM-DD）`。這樣設計是因為 Obsidian 中 Done 區塊收在下方，不會干擾對 Active 任務的瀏覽。
 
-更新 index：匹配項設 `done: true` + `completed` 日期，`stats.total_tasks_standalone` -= 1。啟動 post-op background subagent（layer: action）。
+更新 index：匹配項設 `done: true` + `completed` 日期，`stats.total_tasks_standalone` -= 1。執行 post-op（Bash tool，`node scripts/post-op.mjs --layer action --event '...'`）。
 
 ## 刪除 Task
 
-完全移除 checklist 行（適用於「不需要做了」的情況，區別於「完成了」）。從 index 的 `standalone_tasks` 移除匹配項。若未完成則 `stats.total_tasks_standalone` -= 1。啟動 post-op background subagent（layer: action）。
+完全移除 checklist 行（適用於「不需要做了」的情況，區別於「完成了」）。從 index 的 `standalone_tasks` 移除匹配項。若未完成則 `stats.total_tasks_standalone` -= 1。執行 post-op（Bash tool，`node scripts/post-op.mjs --layer action --event '...'`）。
 
 ## 列出 Tasks
 

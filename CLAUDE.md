@@ -1,4 +1,32 @@
 
+<!-- SPECTRA:START v1.0.1 -->
+
+# Spectra Instructions
+
+This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
+
+## Use `/spectra:*` skills when:
+
+- A discussion needs structure before coding → `/spectra:discuss`
+- User wants to plan, propose, or design a change → `/spectra:propose`
+- Tasks are ready to implement → `/spectra:apply`
+- There's an in-progress change to continue → `/spectra:ingest`
+- User asks about specs or how something works → `/spectra:ask`
+- Implementation is done → `/spectra:archive`
+
+## Workflow
+
+discuss? → propose → apply ⇄ ingest → archive
+
+- `discuss` is optional — skip if requirements are clear
+- Requirements change mid-work? Plan mode → `ingest` → resume `apply`
+
+## Parked Changes
+
+Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra:apply` and `/spectra:ingest` skills handle parked changes automatically.
+
+<!-- SPECTRA:END -->
+
 # TwinMind 知識庫操作指南
 
 本專案是 AI 主導的知識管理系統。使用者透過 terminal 自然語言輸入，AI 全權處理建卡、更新、刪除、連結、MOC 等操作。Obsidian 僅做唯讀瀏覽。
@@ -27,26 +55,24 @@
 
 **Step 4 — 衍生檔案新鮮度檢查**
 
-比較 `vault-index.json` 的 `stats.last_updated` 與 `vault/Home.md` 及 `vault/PARA/Dashboard.md` 的檔案修改時間。若任一衍生檔案的修改時間落後 `last_updated` 超過 60 秒，啟動 background subagent 執行補償性 post-op：
+比較 `vault-index.json` 的 `stats.last_updated` 與 `vault/Home.md` 及 `vault/PARA/Dashboard.md` 的檔案修改時間。若任一衍生檔案的修改時間落後 `last_updated` 超過 60 秒，執行補償性 post-op（透過 Bash tool 調用 `node scripts/post-op.mjs`）：
 
-- Home.md 過期 → `layer: "knowledge"`
-- Dashboard.md 過期 → `layer: "action"`
-- 兩者都過期 → `layer: "both"`
+- Home.md 過期 → `--layer knowledge`
+- Dashboard.md 過期 → `--layer action`
+- 兩者都過期 → `--layer both`
 
-此檢查用於偵測前次 session 的 background post-op 是否未完成（如 subagent timeout 或錯誤）。若兩者都在 60 秒內，不觸發任何補償。
+此檢查用於偵測前次 session 的 post-op 是否未完成。若兩者都在 60 秒內，不觸發任何補償。
 
 **Step 5 — 行動層掃描**
 
 從 `vault-index.json` 讀取以下資料：
-
 - `inbox` 中 `status == "pending"` 的項目數量
 - pending 且 `created` 距今超過 `config.md` 的 `memo_stale_days`（預設 7 天）的 memo 數
 - `standalone_actions` 中 `status == "active"` 且建立超過 `action_stale_days`（預設 14 天）的 action 數
 - `projects` 中 `status == "active"` 且 deadline 在 7 天內的專案數
 
 若任一 > 0，主動提示使用者，例如：
-
-```text
+```
 📥 3 個 inbox 待處理（1 個超過 7 天）
 ⏰ 1 個專案本週到期（發布 TwinMind, 04-10）
 要先 triage 嗎？
@@ -114,7 +140,7 @@
 
 1. **生命週期動詞**：「建立專案」「create project」「暫停」「pause」「恢復」「resume」「完成」「complete」「歸檔」「archive」
 2. **進度紀錄**：「log for」「進度」「紀錄」
-3. **專案查詢**：「list projects」「列出專案」「show me `<project-name>`」「專案狀況」
+3. **專案查詢**：「list projects」「列出專案」「show me <project-name>」「專案狀況」
 4. **卡片-專案連結**：「link ... to project」「連結到專案」「unlink」「取消連結」
 
 注意：卡片連結至**專案**歸類為 PROJECT，不是 CONNECT。提及專案名稱的 action/task 操作也歸 PROJECT（專案內由 tm:project 處理）。
@@ -170,7 +196,6 @@
 3. **指定關係類型**：「X 跟 Y 的關係是 analogous」
 
 排除規則：
-
 - 僅提及一張卡片 → 可能是 QUERY 或 CAPTURE，不歸類為 CONNECT
 - 目標為專案（非卡片）→ 歸類為 PROJECT
 
@@ -183,20 +208,17 @@
 每個意圖類別內，AI 根據輸入內容判斷具體操作（子意圖）：
 
 **CAPTURE：**
-
 - 建立新卡片（預設）
 - 更新既有卡片（使用者指名既有卡片並提供修改內容）
 - 刪除卡片（使用者明確要求刪除）
 
 **INBOX：**
-
 - 建立 memo / idea
 - 升格（7 種路徑：→ Card / Action / Task / Project 等）
 - 捨棄
 - 列出 pending 項目
 
 **ACTION：**
-
 - 建立獨立行動
 - 完成獨立行動（含反思鉤）
 - 列出獨立行動
@@ -204,14 +226,12 @@
 - 升格為專案
 
 **TASK：**
-
 - 新增獨立任務
 - 完成獨立任務
 - 刪除獨立任務
 - 列出獨立任務
 
 **PROJECT：**
-
 - 建立 / 暫停 / 恢復 / 完成（含反思鉤）/ 歸檔專案
 - 新增進度紀錄
 - 連結或取消連結卡片至專案
@@ -219,12 +239,10 @@
 - 專案內 task CRUD（新增/完成/刪除）
 
 **AREA：**
-
 - 建立 / 更新 / 停用 / 重新啟用 Area
 - 關聯/取消關聯 Project 或 Card
 
 **QUERY：**
-
 - 關鍵字搜尋
 - 依 domain 篩選
 - 依 type / status 篩選
@@ -233,7 +251,6 @@
 - Inbox / Action / Task / Area 查詢
 
 **REVIEW：**
-
 - 知識庫摘要（Vault Summary）
 - 索引驗證
 - 索引重建
@@ -244,7 +261,6 @@
 - Action 過期檢查
 
 **CONNECT：**
-
 - 建立連結（可含關係類型）
 - 移除連結
 
@@ -295,15 +311,15 @@ AI 不得忽略模糊輸入。
 
 | 意圖 | Skill | post-op layer | Post-op 執行模式 | Link Inference 模式 |
 |------|-------|---------------|-----------------|-------------------|
-| `CAPTURE` | `tm:capture` | `knowledge` | Background subagent | Inline（main agent） |
-| `INBOX` | `tm:inbox` | `action`（升格為 Card 時用 `both`） | Background subagent | Inline（升格為 Card 時） |
-| `ACTION` | `tm:action` | `action` | Background subagent | — |
-| `TASK` | `tm:task` | `action` | Background subagent | — |
-| `PROJECT` | `tm:project` | `action` | Background subagent | — |
-| `AREA` | `tm:area` | `action` | Background subagent | — |
+| `CAPTURE` | `tm:capture` | `knowledge` | Bash tool | Inline（main agent） |
+| `INBOX` | `tm:inbox` | `action`（升格為 Card 時用 `both`） | Bash tool | Inline（升格為 Card 時） |
+| `ACTION` | `tm:action` | `action` | Bash tool | — |
+| `TASK` | `tm:task` | `action` | Bash tool | — |
+| `PROJECT` | `tm:project` | `action` | Bash tool | — |
+| `AREA` | `tm:area` | `action` | Bash tool | — |
 | `QUERY` | `tm:query` | 不需要（純唯讀） | — | — |
-| `REVIEW` | `tm:review` | 僅索引修復/重建後（`both`） | Background subagent | — |
-| `CONNECT` | `tm:connect` | `knowledge` | Background subagent | — |
+| `REVIEW` | `tm:review` | 僅索引修復/重建後（`both`） | Bash tool | — |
+| `CONNECT` | `tm:connect` | `knowledge` | Bash tool | — |
 
 ### Plan Mode 檢查
 
@@ -313,13 +329,13 @@ Vault 寫入操作（tm:capture、tm:connect、tm:inbox、tm:action、tm:task、
 - 不嘗試執行寫入操作
 - 唯讀操作（tm:query）不受影響，可正常執行
 
-Background subagent 在 plan mode 下不啟動。改為記錄 post-op payload，待 plan mode 退出後由 main agent inline 執行。
+Plan mode 下不執行 post-op Bash 調用。改為記錄 post-op payload，待 plan mode 退出後由 main agent 執行。
 
 ### Post-op 規則
 
-狀態變更操作完成後，對應 skill **不再透過 Skill tool 調用 `/tm:post-op`**，改為透過 Agent tool 啟動 background subagent 執行 post-op pipeline。Main agent 在啟動 subagent 後立即回應使用者，不需等待 post-op 完成。
+狀態變更操作完成後，對應 skill 透過 **Bash tool** 執行 `node scripts/post-op.mjs` 觸發 post-op pipeline。Main agent 等待腳本完成（同步執行），腳本輸出 `post-op done | ...` 後再回應使用者。
 
-Post-op subagent 根據 layer 參數執行不同收尾步驟：
+Post-op 腳本根據 `--layer` 參數執行不同收尾步驟：
 
 | layer | Changelog | MOC 檢查 | Home.md | Dashboard |
 |-------|:---------:|:--------:|:-------:|:---------:|
@@ -329,52 +345,28 @@ Post-op subagent 根據 layer 參數執行不同收尾步驟：
 
 未指定 layer 時預設為 `both`。
 
-Changelog 採用月度切檔（`vault/System/changelog-YYYY-MM.md`）+ append-only 尾部追加。`vault/System/changelog.md` 為索引頁，列出各月連結（newest-first）。Post-op subagent 寫入 changelog 時不讀取既有內容。
+Changelog 採用月度切檔（`vault/System/changelog-YYYY-MM.md`）+ append-only 尾部追加。`vault/System/changelog.md` 為索引頁，列出各月連結（newest-first）。腳本 append 時不讀取既有 changelog 內容。
 
 ### Subagent 委派協定
 
 #### 執行模式
 
-- **Background subagent**（post-op）：透過 Agent tool 的 `run_in_background: true` 啟動。Main agent 不等待結果，立即回應使用者。適用於 changelog、MOC、Home.md、Dashboard.md 等確定性重建操作。
+- **Background subagent**（非 post-op 任務）：透過 Agent tool 的 `run_in_background: true` 啟動。Main agent 不等待結果，立即回應使用者。
+- **Post-op**：透過 **Bash tool** 執行 `node scripts/post-op.mjs --layer <layer> --event '<JSON>'`。腳本同步執行，main agent 等待 exit code 再回應使用者。不使用 Agent tool。
 - **Link inference**：由 main agent inline 執行，不使用 subagent。Main agent 利用 session 啟動時已載入 context 的 vault-index.json notes 資料直接進行語意比對。
 
 #### Prompt Payload 格式
 
-每個 subagent 都接收結構化 prompt，包含：
+每個非 post-op subagent 都接收結構化 prompt，包含：
 
-**Post-op payload：**
+1. **Role declaration** — 一行說明 subagent 的任務目的
+2. **Input payload** — JSON block，包含 subagent 所需的所有 context，必含 `task` 欄位
+3. **Execution steps** — subagent 需執行的具體步驟
+4. **Output format** — subagent 回傳訊息的格式
 
-```json
-{
-  "task": "post-op",
-  "layer": "knowledge | action | both",
-  "event_type": "CARD_CREATED",
-  "event_context": {
-    "card_id": "20260405130000",
-    "card_title": "Rust Ownership",
-    "card_path": "Cards/Rust-Ownership.md",
-    "domains": ["technology"],
-    "affected_project": null
-  },
-  "config": {
-    "moc_threshold_create": 5,
-    "moc_threshold_split": 20,
-    "recent_cards_count": 5,
-    "vault_name": "TwinMind"
-  },
-  "domain_counts": { "technology": 5 },
-  "total_cards": 22,
-  "recent_notes": [
-    { "title": "...", "path": "...", "created": "2026-04-05", "status": "seed", "type": "concept", "domain": ["technology"] }
-  ],
-  "changelog_path": "vault/System/changelog-2026-04.md",
-  "existing_moc_titles": ["Technology", "Learning"]
-}
-```
+Payload 不應包含 post-op 專屬欄位（`config`、`domain_counts`、`total_cards`、`recent_notes`、`changelog_path`、`existing_moc_titles`）——這些欄位已不再適用，post-op 腳本直接從檔案系統讀取 `vault-index.json` 和 `config.md`。
 
-`config`/`domain_counts`/`total_cards`/`recent_notes` 由 main agent 從 context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算（格式 `vault/System/changelog-YYYY-MM.md`）。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得所有 MOC 檔案標題（無 MOC 時為空陣列）。Subagent 使用這些欄位，不再讀取 `config.md`、`vault-index.json`、`changelog.md` 索引頁，也不 glob `Atlas/`。
-
-#### 回傳訊息格式
+#### 回傳訊息格式（非 post-op subagent）
 
 **成功：** `<task> 完成 | <key=value 摘要>`
 **失敗：** `<task> 失敗 | step=<失敗步驟> | error: <錯誤描述>`
@@ -383,36 +375,31 @@ Main agent 解析回傳訊息判斷成功或失敗。回傳訊息不包含 file 
 
 #### 寫入順序保證
 
-**Main agent 必須完成所有 vault-index.json 寫入後，才能啟動 subagent。** 確保 subagent 讀到一致的狀態。
+**Main agent 必須完成 vault-index.json 更新後，才能執行 post-op 腳本。** 確保腳本讀到一致的狀態。
 
 序列：
-
 1. Main agent 寫入主要 artifact（卡片、專案檔案等）
-2. Main agent 更新 vault-index.json
-3. Main agent 回應使用者
-4. Main agent 啟動 background subagent（subagent 只讀 vault-index.json，寫入 changelog/MOC/Home/Dashboard）
+2. Main agent 執行程式化索引更新（Bash tool，`node scripts/update-index.mjs <command> '<JSON>'`）
+3. Main agent 執行 `node scripts/post-op.mjs`（Bash tool，同步）
+4. Main agent 回應使用者
 
-**DELETE 操作的索引更新**使用 Write（非 Edit）策略：Read → 記憶體計算 → Write 全量重寫，工具調用預期為 2 次（1 Read + 1 Write）。這消除了多次 Edit 可能造成的 trailing comma 和分步不一致風險。
+卡片 CRUD 操作（建立、更新、刪除）和連結建立，**不得直接使用 Edit 或 Write tool 修改 vault-index.json**，一律透過 `scripts/update-index.mjs` 處理。腳本原子完成所有必要的 notes/stats 更新。
 
-**Post-op subagent 不寫入 vault-index.json。** MOC 變更透過 return message 回報。
+**Post-op 腳本不寫入 vault-index.json。** 腳本僅讀取 vault-index.json，寫入 changelog/MOC/Home/Dashboard。
 
 #### 錯誤處理
 
-- **Background subagent 失敗**：subagent 自行讀取 hook error 並重試一次。重試仍失敗則回傳失敗訊息，main agent 在下次與使用者互動時告知。
+- **Post-op 腳本失敗**：腳本 exit code 1 並輸出 `post-op failed | step=<step> | error: <描述>` 至 stderr。Main agent 讀取 exit code，若失敗則在當前回應中告知使用者。不自動重試。
+- **非 post-op background subagent 失敗**：subagent 自行讀取 hook error 並重試一次。重試仍失敗則回傳失敗訊息，main agent 在下次與使用者互動時告知。
 - **Inline link inference 失敗**：main agent 跳過連結推理，Connections 保持 `（尚無連結）`，告知使用者自動連結建議暫時不可用。
 
 ### Hook 自動驗證
 
 PostToolUse hooks 會在以下寫入操作後自動執行驗證：
-
 - **`Cards/*.md` / `Sources/*.md` 寫入後** → 驗證 frontmatter 必填欄位和 enum 合法值
 - **`PARA/Inbox/*.md` 寫入後** → 驗證 inbox item frontmatter（type/status enum）
 - **`PARA/Actions/*.md` 寫入後** → 驗證 standalone action frontmatter（id/title/status/created）
 - **`PARA/Projects/*/actions.md|tasks.md` 寫入後** → 驗證 project 欄位匹配目錄名
 - **`vault-index.json` 寫入後** → 驗證 JSON 合法性和九項一致性不變式（total_cards、total_links、雙向連結、domain 計數、version、inbox count、actions count、standalone tasks count）
 
-驗證失敗會 回報錯誤信號（exit code 2），但檔案已被寫入（PostToolUse 是事後偵測控制，非事前攔截）。**AI 收到 hook 失敗時，須立即讀回檔案確認實際狀態，再以單次 corrective Edit 修正不一致。** AI 不需手動執行一致性驗證——hooks 已自動處理。
-
-## Markdown 注意事項
-
-- 在 **Markdown body text** 中，非 tag 用途的 `#` 需跳脫為 `\#` 或用 backtick 包裹。JSON 檔案和 YAML frontmatter 中，`#` 不需跳脫。常見非 tag 場景：程式語言名稱（`C#`、`F#`）、編號（`#1`、`#42`）、issue/PR 引用（`#123`）。
+驗證失敗會 回報錯誤信號（exit code 2），但檔案已被寫入（PostToolUse 是事後偵測控制，非事前攔截）。**AI 收到 hook 失敗時，須��即讀回檔案確認實際狀態，再以單次 corrective Edit 修正不一致。** AI 不需手動執行一致性驗證——hooks 已自��處理。

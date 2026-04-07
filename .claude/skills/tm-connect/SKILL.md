@@ -11,40 +11,15 @@ metadata:
 
 關係類型、分類規則、Connections 格式和反向對照表的完整定義，請讀取 `.claude/skills/tm-capture/references/link-inference.md`（與 capture 共用同一套連結系統）。
 
-一致性驗證由 PostToolUse hooks 自動處理。完成操作後啟動 background subagent 執行 post-op pipeline（`layer: "knowledge"`）。
+一致性驗證由 PostToolUse hooks 自動處理。完成操作後透過 Bash tool 執行 `node scripts/post-op.mjs --layer knowledge` 觸發 post-op pipeline。
 
-### Post-op Subagent 啟動方式
+### Post-op 執行方式
 
-透過 Agent tool（`run_in_background: true`）啟動 subagent，prompt 包含 post-op payload：
-```json
-{
-  "task": "post-op",
-  "layer": "knowledge",
-  "event_type": "<LINK_CREATED|LINK_REMOVED>",
-  "event_context": {
-    "source_id": "<ID>", "source_title": "<title>",
-    "target_id": "<ID>", "target_title": "<title>",
-    "relation": "<relationship_type>",
-    "domains": ["<affected domains>"]
-  },
-  "config": {
-    "moc_threshold_create": "<從 config.md 取值>",
-    "moc_threshold_split": "<從 config.md 取值>",
-    "recent_cards_count": "<從 config.md 取值>",
-    "vault_name": "<從 config.md 取值>"
-  },
-  "domain_counts": {
-    "<domain>": "<從 vault-index.json stats.domains 取值>"
-  },
-  "total_cards": "<從 vault-index.json stats.total_cards 取值>",
-  "recent_notes": [
-    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
-  ],
-  "changelog_path": "vault/System/changelog-YYYY-MM.md",
-  "existing_moc_titles": ["Technology", "Learning"]
-}
+透過 Bash tool 執行：
+```bash
+node scripts/post-op.mjs --layer knowledge --event '{"event_type":"<LINK_CREATED|LINK_REMOVED>","event_context":{"source_title":"<title>","target_title":"<title>","relation":"<type>","domains":["<domain>"]}}'
 ```
-`config`、`domain_counts`、`total_cards`、`recent_notes` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。`changelog_path` 由 main agent 取當前月份計算。`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得。
+腳本同步執行。exit code 0 成功，exit code 1 失敗（stderr 印出錯誤訊息）。
 
 啟動後立即回應使用者。Subagent 執行 changelog（append-only 至 `changelog-YYYY-MM.md`）+ MOC 閾值檢查（使用 payload `config` 和 `domain_counts`，不重新讀取 config.md 或 vault-index.json）+ Home.md 重建（使用 payload `recent_notes`，不重新讀取 vault-index.json 取最新卡片）。
 
@@ -61,8 +36,12 @@ metadata:
 5. 執行連結建立程序（見 `references/link-inference.md` 的「建立連結程序」）：
    - 寫入源卡片 `## Connections`（移除 placeholder 若有）
    - 寫入目標卡片反向連結（依反向對照表）
-   - 更新 `vault-index.json`（**單次 Edit**）：old_string 涵蓋源 note entry、目標 note entry 和 stats 物件的連續 JSON 區塊；new_string 包含完整更新版本（links_to/linked_from 加入對應 ID、重算兩方 link_count、重算 stats.total_links、更新 stats.last_updated）。此操作 SHALL 為單次 Edit tool invocation
-6. 啟動 post-op background subagent（event_type: `LINK_CREATED`）
+   - 透過 Bash tool 執行程式化索引更新（**不得直接 Edit vault-index.json**）：
+     ```bash
+     node scripts/update-index.mjs add-link '{"source":"<source_id>","target":"<target_id>"}'
+     ```
+     腳本自動處理：雙向更新 `links_to`/`linked_from`、重算兩方 `link_count`、遞增 `stats.total_links`、更新 `stats.last_updated`
+6. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type: `LINK_CREATED`）
 
 ## 解除連結
 
@@ -75,4 +54,4 @@ metadata:
    - 從源卡片 `## Connections` 移除含目標卡片 wiki-link 的行。若移除後無連結，恢復 `（尚無連結）`
    - 從目標卡片 `## Connections` 移除含源卡片 wiki-link 的行。同上
    - 更新 `vault-index.json`（**單次 Edit**）：old_string 涵蓋源 note entry、目標 note entry 和 stats 物件的連續 JSON 區塊；new_string 包含移除連結後的完整版本（links_to/linked_from 移除對應 ID、重算兩方 link_count、重算 stats.total_links、更新 stats.last_updated）。此操作 SHALL 為單次 Edit tool invocation
-5. 啟動 post-op background subagent（event_type: `LINK_REMOVED`）
+5. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type: `LINK_REMOVED`）

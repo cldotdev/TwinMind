@@ -9,7 +9,7 @@ metadata:
 
 知識庫的維護和回顧工具。大多數操作是唯讀的（看看知識庫的狀態），但索引修復/重建會修改檔案。
 
-唯讀操作不需觸發 post-op。索引修復/重建完成後需啟動 post-op background subagent（event_type: `INDEX_REBUILT`，layer: both）。
+唯讀操作不需觸發 post-op。索引修復/重建完成後透過 Bash tool 執行 `node scripts/post-op.mjs --layer both --event '{"event_type":"INDEX_REBUILT","event_context":{}}'` 觸發 post-op pipeline。
 
 ## 知識庫摘要（Vault Summary）
 
@@ -69,12 +69,12 @@ metadata:
    - **未追蹤檔案**：檔案存在但 index 沒有
 4. 全部一致 → 「驗證通過」；有差異 → 列出並詢問是否修復
 
-### 修復（需啟動 post-op subagent）
+### 修復（需執行 post-op（Bash tool））
 
 **孤兒移除**：從 notes 移除、更新 stats、清理 links_to/linked_from 引用。
 **未追蹤新增**：讀取 frontmatter，生成 summary，加入 notes 和 stats。
 
-### 完整重建（需啟動 post-op subagent）
+### 完整重建（需執行 post-op（Bash tool））
 
 既有 index 有資料時先確認再覆寫。掃描所有 `.md`、重建 notes/stats/links、保留 projects/areas。寫入前執行九項一致性不變式驗證，發現不一致時在記憶體中修正後再寫入，並在摘要中報告修正項目。完整程序請讀取 `references/index-rebuild.md`。
 

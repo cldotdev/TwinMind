@@ -9,7 +9,7 @@ metadata:
 
 捕捉使用者的想法、知識、問題或來源引用，轉化為知識卡片。建卡後自動尋找並建立與既有卡片的連結——這是知識庫產生價值的核心機制，因為孤立的卡片遠不如互相連結的知識網路有用。
 
-一致性驗證由 PostToolUse hooks 自動處理，不需手動檢查。完成操作後啟動 background subagent 執行 post-op pipeline（changelog、MOC、Home 更新）。連結推理由 main agent inline 執行（不使用 subagent）。
+一致性驗證由 PostToolUse hooks 自動處理，不需手動檢查。完成操作後透過 Bash tool 執行 `node scripts/post-op.mjs` 觸發 post-op pipeline（changelog、MOC、Home 更新）。連結推理由 main agent inline 執行（不使用 subagent）。
 
 ## 建立卡片（CARD_CREATED）
 
@@ -57,22 +57,6 @@ related_projects: []
 
 10 個必填欄位，全部要有值。新卡片固定 `status: seed`、`confidence: medium`。
 
-### Step 4.5 — URL 預處理
-
-若使用者輸入包含外部 URL（HTTP/HTTPS），在撰寫 body 前批次取得標題：
-
-1. 掃描使用者原始輸入中所有的外部 URL（行內、腳注定義、參考清單等，不包含 wiki-link），提取唯一值；不論該 URL 是否被正文引用，一律納入
-2. 若無 URL → 跳過此步驟
-3. 檢查使用者輸入中哪些 URL 已有明確標題（如「這篇《Rust 指南》 `https://...`」），直接寫入對照表
-4. 對**剩餘**沒有使用者標題的 URL 批次執行：`node scripts/fetch-title.mjs <url1> [url2] ...`
-5. 合併結果建立 url→title 對照表，優先序：
-   - 使用者標題（步驟 3）
-   - fetch 標題（步驟 4）
-   - URL path slug 推測並翻譯為 locale 語言（如 `/my-great-post` → `我的好文章`）
-   - 以上皆不可行 → 留空（body 撰寫時用裸連結 `<url>`）
-
-對照表供 Step 5 body 撰寫使用。Fetch 失敗不阻擋建卡流程。
-
 ### Step 5 — 寫入卡片檔案
 
 ```markdown
@@ -82,7 +66,7 @@ related_projects: []
 
 # <title>
 
-<使用者輸入重整為原子化筆記內容；外部 URL 以 Step 4.5 對照表格式化為 [title](url)>
+<使用者輸入重整為原子化筆記內容>
 
 ## Connections
 
@@ -109,104 +93,30 @@ related_projects: []
 
 若 vault 為空（`notes` 為空物件），跳過連結推理，直接保持 `（尚無連結）`。
 
-### Step 6 — 更新索引（單次 Edit）
+### Step 6 — 更新索引（程式化 CLI）
 
-以**單次 Edit tool invocation** 原子更新 `vault/System/vault-index.json`。禁止拆分為多次 Edit——每次 Edit 都會觸發 hook 驗證，中間狀態必然違反不變式。
+透過 Bash tool 執行 `scripts/update-index.mjs` 更新 `vault/System/vault-index.json`。**LLM 不得直接使用 Edit 或 Write tool 修改 vault-index.json。**
 
-**操作方式：** `old_string` 必須涵蓋一段連續的 JSON 區塊，包含所有需要變更的部分。`new_string` 包含完整更新後的版本。
-
-**需要在同一次 Edit 中完成的所有變更：**
-1. 在 `notes` 新增條目（key 為 timestamp ID）：
-
-   ```json
-   "<ID>": {
-     "title": "<title>",
-     "path": "Cards/<slug>.md",
-     "type": "<type>",
-     "status": "seed",
-     "domain": ["<domain1>"],
-     "summary": "<一句話摘要>",
-     "links_to": ["<Step 5.5 採納的連結目標 ID，或空陣列>"],
-     "linked_from": [],
-     "link_count": <連結數或 0>
-   }
-   ```
-2. 若 Step 5.5 有連結目標：更新每個 target note 的 `linked_from`（加入新卡 ID）和 `link_count`
-3. `stats.total_cards` += 1
-4. `stats.total_links` += 新增連結數
-5. 每個 domain：`stats.domains[tag]` += 1（不存在則初始化為 1）
-6. `stats.last_updated` = 當前 ISO 8601
-
-**範例——建卡有 1 個連結目標時的 Edit 範圍：**
-
-`old_string` 涵蓋：最後一個既有 note entry 尾部 + `stats` 物件（含 target note entry，若不連續則擴大範圍至涵蓋所有受影響區塊）。
-
-`new_string` 包含：原始區塊 + 新 note entry 插入 + target note 的 `linked_from`/`link_count` 已更新 + `stats` 數值已更新。
-
-**範例——建卡無連結時的 Edit 範圍：**
-
-`old_string` 涵蓋：最後一個既有 note entry 尾部 + `stats` 物件。
-
-`new_string` 包含：原始尾部 + 新 note entry + `stats` 數值已更新（`total_cards` +1、`domains` 更新、`last_updated` 更新）。
-
-### Step 7 — 啟動 post-op（Background Subagent）
-
-**不再調用 `/tm:post-op` Skill tool。** 改為透過 Agent tool 啟動 background subagent 執行 post-op pipeline。
-
-**寫入順序保證：** Step 6（索引更新）必須完成後才能啟動 subagent。
-
-透過 Agent tool（`run_in_background: true`）啟動 subagent，prompt 包含：
-
-```text
-你是 TwinMind post-op subagent。執行 post-op pipeline 收尾工作。
-
-## 輸入
-{
-  "task": "post-op",
-  "layer": "knowledge",
-  "event_type": "<CARD_CREATED | CARD_UPDATED | CARD_DELETED>",
-  "event_context": {
-    "card_id": "<卡片 ID>",
-    "card_title": "<卡片標題>",
-    "card_path": "<Cards/slug.md 或 Sources/slug.md>",
-    "domains": ["<domain1>", ...]
-  },
-  "config": {
-    "moc_threshold_create": <從 config.md 取值>,
-    "moc_threshold_split": <從 config.md 取值>,
-    "recent_cards_count": <從 config.md 取值>,
-    "vault_name": "<從 config.md 取值>"
-  },
-  "domain_counts": {
-    "<domain>": <從 vault-index.json stats.domains 取值>
-  },
-  "total_cards": <從 vault-index.json stats.total_cards 取值>,
-  "recent_notes": [
-    { "title": "...", "path": "...", "created": "YYYY-MM-DD", "status": "...", "type": "...", "domain": ["..."] }
-  ],
-  "changelog_path": "vault/System/changelog-YYYY-MM.md",
-  "existing_moc_titles": ["Technology", "Learning"]
-}
-
-`config`、`domain_counts`、`total_cards` 從 main agent context 中已有的 config.md 和 vault-index.json 資料填充。
-`recent_notes` 為 vault-index.json notes 按 id 降序取前 N 筆（N = config.recent_cards_count），每筆含 title/path/created/status/type/domain。
-`changelog_path` 由 main agent 取當前月份計算（格式 `vault/System/changelog-YYYY-MM.md`）。
-`existing_moc_titles` 由 main agent 從 `vault/Atlas/` 掃描取得所有 MOC 檔案標題（無 MOC 時為空陣列）。
-
-## 執行步驟
-依照 .claude/skills/tm-post-op/SKILL.md 的完整程序執行：
-1. 寫入 changelog（event_type + event_context）— 直接寫入 `changelog_path` 指定的檔案，不讀 changelog.md 索引頁來判斷月份
-2. MOC 觸發檢查（從 payload 的 config 和 domain_counts 取值，用 `existing_moc_titles` 判斷 MOC 是否存在，不讀 config.md、vault-index.json、不 glob Atlas/）
-3. Home.md 重新生成（Recent Cards 從 payload 的 recent_notes 生成，其餘區塊讀 vault-index.json）
-
-不寫入 vault-index.json。MOC 變更包含在回傳訊息中。
-
-## 回傳格式
-成功：post-op 完成 | layer=knowledge | changelog ✓ | MOC: <狀態> | Home.md ✓
-失敗：post-op 失敗 | step=<步驟> | error: <描述>
+```bash
+node scripts/update-index.mjs add-card '{"id":"<ID>","title":"<title>","path":"<path>","type":"<type>","status":"seed","domain":["<domain>"],"summary":"<摘要>","links_to":["<Step 5.5 採納的目標 ID>"]}'
 ```
 
-啟動 subagent 後立即回應使用者，不等待 post-op 完成。
+- `links_to` 為空陣列時仍需包含（`"links_to":[]`）
+- 腳本自動處理：新增 notes 條目、雙向連結更新（targets 的 `linked_from`/`link_count`）、stats 更新（`total_cards`、`total_links`、`domains`、`last_updated`）
+- 成功時 stdout 印出 `ok | add-card | id=<ID> title="<title>" links=<N>`
+- 失敗時 stderr 印出 `error: <description>`，exit code 1
+
+### Step 7 — 執行 post-op（Bash tool）
+
+**寫入順序保證：** Step 6（索引更新）必須完成後才能執行 post-op。
+
+透過 Bash tool 執行：
+
+```bash
+node scripts/post-op.mjs --layer knowledge --event '{"event_type":"<CARD_CREATED|CARD_UPDATED|CARD_DELETED>","event_context":{"card_title":"<標題>","card_path":"<路徑>","domains":["<domain>"]}}'
+```
+
+腳本同步執行。exit code 0 表示成功（stdout 印出 `post-op done | ...`），exit code 1 表示失敗（stderr 印出 `post-op failed | step=... | error: ...`）。失敗時告知使用者錯誤內容。執行完成後再回應使用者。
 
 ## 更新卡片（CARD_UPDATED）
 
@@ -215,8 +125,12 @@ related_projects: []
 3. 修改內容或 frontmatter（status, domain, confidence, body 等）
 4. `updated` 設為當天日期。`id` 和 `created` 不得修改
 5. 寫回檔案
-6. 同步 `vault-index.json`：更新對應 notes 條目。若 domain 變更：舊 domain -1（歸零刪 key），新 domain +1。更新 `stats.last_updated`
-7. 啟動 post-op background subagent（同 Step 7 格式，event_type 為 `CARD_UPDATED`，event_context 含變更摘要）
+6. 透過 Bash tool 執行程式化索引更新（**不得直接 Edit vault-index.json**）：
+   ```bash
+   node scripts/update-index.mjs update-card '{"id":"<ID>","<field>":"<value>"}'
+   ```
+   payload 僅包含 `id` 和**實際變更的欄位**（title、type、status、domain、summary）。腳本自動處理 domain diff 計算（舊 domain -1 歸零刪 key、新 domain +1）和 `stats.last_updated` 更新。
+7. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type 為 `CARD_UPDATED`，event_context 含變更摘要）
 
 ## 刪除卡片（CARD_DELETED）
 
@@ -224,16 +138,9 @@ related_projects: []
 2. 找不到 → 回報「未找到匹配的卡片」
 3. 找到後：
    a. 刪除卡片 `.md` 檔案
-   b. **全量重寫** `vault-index.json`（Read → 記憶體計算 → Write，共 2 次工具調用）：
-      1. 用 Read 工具讀取完整 `vault-index.json`
-      2. 在記憶體中執行所有變更：
-         - 移除 `notes` 條目
-         - `stats.total_cards` -= 1
-         - 每個 domain：`stats.domains[tag]` -= 1（歸零刪 key）
-         - 清理其他 notes 的 `links_to`/`linked_from` 中該卡片 ID
-         - 重算受影響 notes 的 `link_count`
-         - 重算 `stats.total_links`（所有 `links_to` 長度總和）
-         - 檢查 `related_projects`，對每個專案：`projects[name].card_refs` -= 1（最小 0）
-         - 更新 `stats.last_updated`
-      3. 用 Write 工具將完整 JSON 物件寫回 `vault-index.json`（單次寫入，不使用 Edit）
-   c. 啟動 post-op background subagent（同 Step 7 格式，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）
+   b. 透過 Bash tool 執行程式化索引更新（**不得直接 Read/Write vault-index.json**）：
+      ```bash
+      node scripts/update-index.mjs delete-card '{"id":"<ID>"}'
+      ```
+      腳本自動處理：移除 notes 條目、清理所有雙向連結引用（`links_to`/`linked_from`）、重算 `link_count`、重算 `stats.total_links`、更新 `stats.total_cards`/`stats.domains`/`stats.last_updated`
+   c. 執行 post-op（Bash tool，`node scripts/post-op.mjs --layer knowledge --event '...'`，event_type 為 `CARD_DELETED`，event_context 含被刪卡片 title/path/domains）

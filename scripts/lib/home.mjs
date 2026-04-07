@@ -40,6 +40,7 @@ export async function regenerateHome({ vaultRoot }) {
   const index = JSON.parse(readFileSync(indexPath, 'utf8'));
   const config = resolveConfig();
   const recentCount = config.recent_cards_count ?? 5;
+  const mocThreshold = config.moc_threshold_create ?? 5;
 
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -49,7 +50,7 @@ export async function regenerateHome({ vaultRoot }) {
 
   let projectsBlock = '';
   if (activeProjects.length === 0) {
-    projectsBlock = '（目前沒有進行中的專案）';
+    projectsBlock = '尚無進行中專案';
   } else {
     projectsBlock = activeProjects.map(([id, p]) => {
       const meta = readProjectMeta(projectsDir, id);
@@ -65,7 +66,7 @@ export async function regenerateHome({ vaultRoot }) {
 
   let areasBlock = '';
   if (activeAreas.length === 0) {
-    areasBlock = '（目前沒有關注領域）';
+    areasBlock = '尚無關注領域';
   } else {
     areasBlock = activeAreas.map(([id, a]) => `- [[PARA/Areas/${id}|${a.name}]]`).join('\n');
   }
@@ -75,7 +76,7 @@ export async function regenerateHome({ vaultRoot }) {
   if (existsSync(atlasDir)) {
     const mocFiles = readdirSync(atlasDir).filter(f => f.endsWith('.md'));
     if (mocFiles.length === 0) {
-      knowledgeMapBlock = '（尚無 MOC，卡片累積達門檻後自動建立）';
+      knowledgeMapBlock = `尚未建立知識地圖（需累積至少 ${mocThreshold} 張同領域卡片）`;
     } else {
       knowledgeMapBlock = mocFiles.map(f => {
         const slug = f.replace(/\.md$/, '');
@@ -85,7 +86,7 @@ export async function regenerateHome({ vaultRoot }) {
       }).join('\n');
     }
   } else {
-    knowledgeMapBlock = '（尚無 MOC）';
+    knowledgeMapBlock = `尚未建立知識地圖（需累積至少 ${mocThreshold} 張同領域卡片）`;
   }
 
   // --- Block 4: Recently Updated (top N by ID descending) ---
@@ -113,7 +114,7 @@ export async function regenerateHome({ vaultRoot }) {
 
   let seedsBlock = '';
   if (seeds.length === 0) {
-    seedsBlock = '（目前沒有需要發展的 seed）';
+    seedsBlock = '所有卡片都已在成長中！';
   } else {
     seedsBlock = seeds.map(([, n]) => {
       const emoji = statusEmoji(n.status);

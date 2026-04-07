@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "twinmind",
-      "source": ".",
+      "source": "./",
       "description": "AI-driven personal knowledge and project management system integrating Zettelkasten, LYT, and PARA methods",
       "version": "0.1.0",
       "homepage": "https://github.com/VolderLu/TwinMind",

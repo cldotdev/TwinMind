@@ -16,28 +16,8 @@
       "hooks": [
         {
           "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-card.js",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-inbox.js",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-action.js",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-project-files.js",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-index.js",
-          "timeout": 30
+          "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate.js",
+          "timeout": 10
         }
       ]
     }

@@ -2,26 +2,12 @@
  * moc.mjs — MOC threshold checking and create/update/delete for TwinMind vault.
  */
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
-import { join } from 'path';
-
-function parseYamlFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-  const result = {};
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^(\w+):\s*(.*)/);
-    if (m) {
-      const key = m[1];
-      const raw = m[2].trim().replace(/^["']|["']$/g, '');
-      result[key] = raw === '' ? null : (isNaN(raw) || raw === '' ? raw : Number(raw));
-    }
-  }
-  return result;
-}
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolveConfig } from './resolve-config.mjs';
 
 function domainToFilename(domain) {
-  return domain.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-') + '.md';
+  return `${domain.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-')}.md`;
 }
 
 function domainToTitle(domain) {
@@ -76,7 +62,7 @@ function buildMocContent(domain, notes, today) {
       // path like "Cards/foo.md" → wikilink slug "foo"
       const slug = note.path.replace(/^.*\//, '').replace(/\.md$/, '');
       const summary = note.summary ? note.summary.split('——')[0].split('。')[0] : '';
-      sections += `- ${emoji} [[${slug}|${note.title}]]${summary ? ' — ' + summary : ''}\n`;
+      sections += `- ${emoji} [[${slug}|${note.title}]]${summary ? ` — ${summary}` : ''}\n`;
     }
   }
 
@@ -90,16 +76,13 @@ function buildMocContent(domain, notes, today) {
  * @returns {string} status summary
  */
 export async function checkMOC({ event, vaultRoot }) {
-  const configPath = join(vaultRoot, 'System', 'config.md');
   const indexPath = join(vaultRoot, 'System', 'vault-index.json');
   const atlasDir = join(vaultRoot, 'Atlas');
 
-  if (!existsSync(configPath)) throw new Error(`config.md not found at ${configPath}`);
   if (!existsSync(indexPath)) throw new Error(`vault-index.json not found at ${indexPath}`);
 
-  const config = parseYamlFrontmatter(readFileSync(configPath, 'utf8'));
+  const config = resolveConfig();
   const thresholdCreate = config.moc_threshold_create ?? 5;
-  const thresholdSplit = config.moc_threshold_split ?? 20;
 
   const index = JSON.parse(readFileSync(indexPath, 'utf8'));
   const domainCounts = index.stats?.domains ?? {};
@@ -118,24 +101,13 @@ export async function checkMOC({ event, vaultRoot }) {
     const mocExists = existsSync(mocPath);
 
     if (count >= thresholdCreate) {
-      // Filter notes belonging to this domain
       const domainNotes = notes.filter(n => Array.isArray(n.domain) && n.domain.includes(domain));
-
-      if (!mocExists) {
-        // Create MOC
-        const content = buildMocContent(domain, domainNotes, today);
-        writeFileSync(mocPath, content, 'utf8');
-        const title = domainToTitle(domain);
-        process.stdout.write(`MOC: ${title} created\n`);
-        actions.push(`${title} created`);
-      } else {
-        // Update MOC
-        const content = buildMocContent(domain, domainNotes, today);
-        writeFileSync(mocPath, content, 'utf8');
-        const title = domainToTitle(domain);
-        process.stdout.write(`MOC: ${title} updated\n`);
-        actions.push(`${title} updated`);
-      }
+      const content = buildMocContent(domain, domainNotes, today);
+      writeFileSync(mocPath, content, 'utf8');
+      const title = domainToTitle(domain);
+      const verb = mocExists ? 'updated' : 'created';
+      process.stdout.write(`MOC: ${title} ${verb}\n`);
+      actions.push(`${title} ${verb}`);
     } else if (mocExists) {
       // Delete MOC — domain dropped below threshold
       unlinkSync(mocPath);

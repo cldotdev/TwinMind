@@ -5,3 +5,8 @@
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Claude Code (externally installed plugins and local settings)
+.claude/skills/openspec-*/
+.claude/commands/opsx/
+.claude/settings.local.json

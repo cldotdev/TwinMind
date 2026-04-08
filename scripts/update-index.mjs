@@ -12,13 +12,11 @@
  *   1 — failure (stderr: "error: <description>")
  */
 
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-import { readFileSync, writeFileSync } from 'fs';
+import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolveVaultRoot } from './lib/resolve-config.mjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const indexPath = resolve(__dirname, '..', 'vault', 'System', 'vault-index.json');
+const indexPath = join(resolveVaultRoot(), 'System', 'vault-index.json');
 
 function fail(message) {
   process.stderr.write(`error: ${message}\n`);

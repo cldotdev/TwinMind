@@ -2,23 +2,10 @@
  * home.mjs — Regenerate vault/Home.md from vault-index.json
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
-import { join } from 'path';
-
-function parseYamlFrontmatter(content) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return {};
-  const result = {};
-  for (const line of match[1].split('\n')) {
-    const m = line.match(/^(\w+):\s*(.*)/);
-    if (m) {
-      const key = m[1];
-      const raw = m[2].trim().replace(/^["']|["']$/g, '');
-      result[key] = raw === '' ? null : (isNaN(raw) || raw === '' ? raw : Number(raw));
-    }
-  }
-  return result;
-}
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { resolveConfig } from './resolve-config.mjs';
+import { readProjectMeta } from './project-meta.mjs';
 
 function statusEmoji(status) {
   return { seed: '🌱', growing: '🌿', evergreen: '🌳' }[status] || '🌱';
@@ -38,39 +25,24 @@ function countMocCards(mocPath) {
     const match = content.match(/\*(\d+) cards/);
     if (match) return parseInt(match[1], 10);
     // Count bullet items in the file (exclude non-card lines)
-    return (content.match(/^- [🌱🌿🌳]/gm) || []).length;
+    return (content.match(/^- [🌱🌿🌳]/gmu) || []).length;
   } catch {
     return 0;
   }
 }
 
-/**
- * Read a project goal.md to get title and deadline.
- */
-function readProjectMeta(projectsDir, projectId) {
-  const goalPath = join(projectsDir, projectId, 'goal.md');
-  if (!existsSync(goalPath)) return { title: projectId, deadline: null };
-  const content = readFileSync(goalPath, 'utf8');
-  const fm = parseYamlFrontmatter(content);
-  return {
-    title: (fm.title || projectId).replace(/^["']|["']$/g, ''),
-    deadline: fm.deadline || null,
-  };
-}
-
-export async function regenerateHome({ event, vaultRoot }) {
+export async function regenerateHome({ vaultRoot }) {
   const indexPath = join(vaultRoot, 'System', 'vault-index.json');
-  const configPath = join(vaultRoot, 'System', 'config.md');
   const homePath = join(vaultRoot, 'Home.md');
   const atlasDir = join(vaultRoot, 'Atlas');
   const projectsDir = join(vaultRoot, 'PARA', 'Projects');
 
   const index = JSON.parse(readFileSync(indexPath, 'utf8'));
-  const config = parseYamlFrontmatter(readFileSync(configPath, 'utf8'));
+  const config = resolveConfig();
   const recentCount = config.recent_cards_count ?? 5;
+  const mocThreshold = config.moc_threshold_create ?? 5;
 
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const today = now.slice(0, 10);
 
   // --- Block 1: Active Projects ---
   const activeProjects = Object.entries(index.projects ?? {})
@@ -78,7 +50,7 @@ export async function regenerateHome({ event, vaultRoot }) {
 
   let projectsBlock = '';
   if (activeProjects.length === 0) {
-    projectsBlock = '（目前沒有進行中的專案）';
+    projectsBlock = '尚無進行中專案';
   } else {
     projectsBlock = activeProjects.map(([id, p]) => {
       const meta = readProjectMeta(projectsDir, id);
@@ -94,7 +66,7 @@ export async function regenerateHome({ event, vaultRoot }) {
 
   let areasBlock = '';
   if (activeAreas.length === 0) {
-    areasBlock = '（目前沒有關注領域）';
+    areasBlock = '尚無關注領域';
   } else {
     areasBlock = activeAreas.map(([id, a]) => `- [[PARA/Areas/${id}|${a.name}]]`).join('\n');
   }
@@ -104,7 +76,7 @@ export async function regenerateHome({ event, vaultRoot }) {
   if (existsSync(atlasDir)) {
     const mocFiles = readdirSync(atlasDir).filter(f => f.endsWith('.md'));
     if (mocFiles.length === 0) {
-      knowledgeMapBlock = '（尚無 MOC，卡片累積達門檻後自動建立）';
+      knowledgeMapBlock = `尚未建立知識地圖（需累積至少 ${mocThreshold} 張同領域卡片）`;
     } else {
       knowledgeMapBlock = mocFiles.map(f => {
         const slug = f.replace(/\.md$/, '');
@@ -114,7 +86,7 @@ export async function regenerateHome({ event, vaultRoot }) {
       }).join('\n');
     }
   } else {
-    knowledgeMapBlock = '（尚無 MOC）';
+    knowledgeMapBlock = `尚未建立知識地圖（需累積至少 ${mocThreshold} 張同領域卡片）`;
   }
 
   // --- Block 4: Recently Updated (top N by ID descending) ---
@@ -130,7 +102,7 @@ export async function regenerateHome({ event, vaultRoot }) {
       const emoji = statusEmoji(n.status);
       const slug = n.path.replace(/^.*?\//, '').replace(/\.md$/, '');
       const folder = n.path.startsWith('Sources/') ? 'Sources' : 'Cards';
-      const date = id.slice(0, 4) + '-' + id.slice(4, 6) + '-' + id.slice(6, 8);
+      const date = `${id.slice(0, 4)}-${id.slice(4, 6)}-${id.slice(6, 8)}`;
       return `- ${emoji} [[${folder}/${slug}|${n.title}]] — ${date}`;
     }).join('\n');
   }
@@ -142,7 +114,7 @@ export async function regenerateHome({ event, vaultRoot }) {
 
   let seedsBlock = '';
   if (seeds.length === 0) {
-    seedsBlock = '（目前沒有需要發展的 seed）';
+    seedsBlock = '所有卡片都已在成長中！';
   } else {
     seedsBlock = seeds.map(([, n]) => {
       const emoji = statusEmoji(n.status);
@@ -167,23 +139,23 @@ Knowledge Layer Entry Point — 由 scripts/post-op.mjs (layer=knowledge/both) �
 
 > 知識面入口。行動面請見 [[PARA/Dashboard|Dashboard]]。
 
-## Active Projects
+## 進行中專案
 
 ${projectsBlock}
 
-## Areas of Focus
+## 關注領域
 
 ${areasBlock}
 
-## Knowledge Map
+## 知識地圖
 
 ${knowledgeMapBlock}
 
-## Recently Updated
+## 最近新增
 
 ${recentBlock}
 
-## Seeds to Develop
+## 待發展 (seeds)
 
 ${seedsBlock}
 `;

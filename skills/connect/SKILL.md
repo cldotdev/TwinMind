@@ -36,6 +36,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/post-op.mjs --layer knowledge --event '{"even
    - 未指定 → 依 `${CLAUDE_PLUGIN_ROOT}/skills/capture/references/link-inference.md` 的分類優先序自動推斷
 4. 說明文字：使用者提供則用，未提供則 AI 生成一句話
 5. 執行連結建立程序（見 `${CLAUDE_PLUGIN_ROOT}/skills/capture/references/link-inference.md` 的「建立連結程序」）：
+   - Connections 格式：`- <符號> [[<slug>|<title>]] — <一句話說明為何連結>`（slug 為目標卡片檔名，不含 `.md`）
    - 寫入源卡片 `## Connections`（移除 placeholder 若有）
    - 寫入目標卡片反向連結（依反向對照表）
    - 透過 Bash tool 執行程式化索引更新（**不得直接 Edit vault-index.json**）：

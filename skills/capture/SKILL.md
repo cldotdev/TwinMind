@@ -104,6 +104,7 @@ related_projects: []
 **處理結果：**
 
 - **有建議且採納**：對每筆採納的建議，依 `references/link-inference.md` 的「建立連結程序」執行雙向連結寫入
+  - Connections 格式：`- <符號> [[<slug>|<title>]] — <一句話說明為何連結>`（slug 為目標卡片檔名，不含 `.md`）
 - **無建議**：Connections 保持 `（尚無連結）`
 - **索引資料異常**（如 notes 資料缺失或格式錯誤）：跳過連結推理，Connections 保持 `（尚無連結）`，告知使用者自動連結建議暫時不可用
 

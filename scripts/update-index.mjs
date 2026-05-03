@@ -4,6 +4,7 @@
  *
  * Usage:
  *   node scripts/update-index.mjs <subcommand> '<JSON payload>'
+ *   node scripts/update-index.mjs --help
  *
  * Subcommands: add-card, update-card, delete-card, add-link
  *
@@ -16,10 +17,43 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolveVaultRoot } from './lib/resolve-config.mjs';
 
-const indexPath = join(resolveVaultRoot(), 'System', 'vault-index.json');
+function getIndexPath() {
+  return join(resolveVaultRoot(), 'System', 'vault-index.json');
+}
 
-function fail(message) {
-  process.stderr.write(`error: ${message}\n`);
+const USAGE_HEADER = "Usage: node update-index.mjs <subcommand> '<JSON payload>'\n\n";
+
+const USAGE = {
+  'add-card': `add-card '{"id":"<ID>","title":"<title>","path":"<path>","type":"<type>","status":"<status>","domain":["<tag>"],"summary":"<text>","links_to":["<id>"]}'
+  Required: id, title, path, type, status, domain (array), summary
+  Optional: links_to (array of existing card IDs; missing targets are skipped with a warning)`,
+
+  'update-card': `update-card '{"id":"<ID>","<field>":"<value>"}'
+  Required: id
+  Updatable fields: title, type, status, domain (array), summary`,
+
+  'delete-card': `delete-card '{"id":"<ID>"}'
+  Required: id
+  Cleans up bidirectional links and stats automatically.`,
+
+  'add-link': `add-link '{"source":"<source_id>","target":"<target_id>"}'
+  Required: source, target (both must reference existing cards)`,
+};
+
+function printUsage(stream, cmd) {
+  stream.write(USAGE_HEADER);
+  if (cmd && USAGE[cmd]) {
+    stream.write(`${USAGE[cmd]}\n`);
+  } else {
+    for (const doc of Object.values(USAGE)) {
+      stream.write(`${doc}\n\n`);
+    }
+  }
+}
+
+function fail(message, cmd) {
+  process.stderr.write(`error: ${message}\n\n`);
+  printUsage(process.stderr, cmd);
   process.exit(1);
 }
 
@@ -28,18 +62,18 @@ function ok(command, details) {
 }
 
 function readIndex() {
-  const raw = readFileSync(indexPath, 'utf8');
+  const raw = readFileSync(getIndexPath(), 'utf8');
   return JSON.parse(raw);
 }
 
 function writeIndex(data) {
   data.stats.last_updated = new Date().toISOString();
-  writeFileSync(indexPath, JSON.stringify(data, null, 2), 'utf8');
+  writeFileSync(getIndexPath(), JSON.stringify(data, null, 2), 'utf8');
 }
 
 // --- Subcommand: add-card ---
 
-function addCard(payload) {
+function addCard(payload, fail) {
   const { id, title, path, type, status, domain, summary, links_to: rawLinks } = payload;
 
   if (!id || !title || !path || !type || !status || !domain || !summary) {
@@ -98,7 +132,7 @@ function addCard(payload) {
 
 // --- Subcommand: update-card ---
 
-function updateCard(payload) {
+function updateCard(payload, fail) {
   const { id, ...fields } = payload;
   if (!id) fail('missing required field: id');
 
@@ -145,7 +179,7 @@ function updateCard(payload) {
 
 // --- Subcommand: delete-card ---
 
-function deleteCard(payload) {
+function deleteCard(payload, fail) {
   const { id } = payload;
   if (!id) fail('missing required field: id');
 
@@ -197,7 +231,7 @@ function deleteCard(payload) {
 
 // --- Subcommand: add-link ---
 
-function addLink(payload) {
+function addLink(payload, fail) {
   const { source, target } = payload;
   if (!source) fail('missing required field: source');
   if (!target) fail('missing required field: target');
@@ -226,30 +260,35 @@ function addLink(payload) {
 
 // --- CLI dispatch ---
 
+const HANDLERS = {
+  'add-card': addCard,
+  'update-card': updateCard,
+  'delete-card': deleteCard,
+  'add-link': addLink,
+};
+
 const [,, subcommand, payloadArg] = process.argv;
 
-const VALID_COMMANDS = ['add-card', 'update-card', 'delete-card', 'add-link'];
-
-if (!subcommand || !VALID_COMMANDS.includes(subcommand)) {
-  if (subcommand) {
-    fail(`unknown command "${subcommand}"`);
-  } else {
-    fail('subcommand required (add-card|update-card|delete-card|add-link)');
-  }
+if (subcommand === '--help' || subcommand === '-h' || subcommand === 'help') {
+  printUsage(process.stdout);
+  process.exit(0);
 }
 
-if (!payloadArg) fail('invalid JSON payload');
+if (!subcommand) {
+  fail(`subcommand required (${Object.keys(HANDLERS).join('|')})`);
+}
+
+if (!HANDLERS[subcommand]) {
+  fail(`unknown command "${subcommand}"`);
+}
+
+if (!payloadArg) fail('missing JSON payload', subcommand);
 
 let payload;
 try {
   payload = JSON.parse(payloadArg);
 } catch {
-  fail('invalid JSON payload');
+  fail('invalid JSON payload', subcommand);
 }
 
-switch (subcommand) {
-  case 'add-card':    addCard(payload);    break;
-  case 'update-card': updateCard(payload); break;
-  case 'delete-card': deleteCard(payload); break;
-  case 'add-link':    addLink(payload);    break;
-}
+HANDLERS[subcommand](payload, (msg) => fail(msg, subcommand));
